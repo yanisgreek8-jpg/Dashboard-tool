@@ -1,0 +1,274 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.wrap{padding:16px 0;display:flex;flex-direction:column;gap:12px;font-family:var(--font-sans)}
+.card{background:var(--color-background-secondary);border:1px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px}
+.card-title{font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:12px}
+.card-sub{font-size:12px;color:var(--color-text-secondary);margin-bottom:14px;margin-top:-8px}
+textarea{width:100%;min-height:90px;background:var(--color-background-primary);border:1px solid var(--color-border-secondary);border-radius:8px;padding:10px;font-family:var(--font-sans);font-size:13px;color:var(--color-text-primary);resize:vertical;outline:none}
+textarea:focus{border-color:var(--color-border-primary)}
+.btn-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+button{background:var(--color-text-primary);color:var(--color-background-primary);border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s}
+button:hover{opacity:.8}
+.btn-sec{background:transparent;color:var(--color-text-primary);border:1px solid var(--color-border-secondary)}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--color-background-primary);border:1px solid var(--color-border-tertiary);border-radius:10px;padding:12px}
+.stat-val{font-size:18px;font-weight:500;color:var(--color-text-primary)}
+.stat-lbl{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.stat-diff{font-size:11px;margin-top:4px}
+.up{color:#27500A}.dn{color:#791F1F}.eq{color:var(--color-text-tertiary)}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.pill-up{background:#EAF3DE;color:#27500A}
+.pill-dn{background:#FCEBEB;color:#791F1F}
+.pill-eq{background:#F1EFE8;color:#5F5E5A}
+.chart-wrap{width:100%;overflow:hidden}
+canvas{width:100%!important}
+.insight{background:var(--color-background-primary);border-left:3px solid #888;border-radius:0 8px 8px 0;padding:9px 12px;font-size:13px;color:var(--color-text-primary);margin-bottom:6px}
+.insight.warn{border-left-color:#E24B4A}
+.insight.good{border-left-color:#639922}
+.insight.info{border-left-color:#378ADD}
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--color-border-secondary);color:var(--color-text-secondary);background:transparent;transition:all .15s}
+.tab.active{background:var(--color-text-primary);color:var(--color-background-primary);border-color:transparent}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.bar-label{font-size:12px;color:var(--color-text-primary);width:140px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-track{flex:1;height:20px;background:var(--color-background-primary);border-radius:4px;overflow:hidden;border:1px solid var(--color-border-tertiary)}
+.bar-fill{height:100%;border-radius:4px;transition:width .4s ease}
+.bar-val{font-size:11px;color:var(--color-text-secondary);width:60px;text-align:right;flex-shrink:0}
+.hidden{display:none}
+.history-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.rec-row{padding:7px 0;border-bottom:1px solid var(--color-border-tertiary);font-size:12px;color:var(--color-text-secondary);cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.rec-row:last-child{border-bottom:none}
+.rec-row:hover{color:var(--color-text-primary)}
+</style>
+
+<div class="wrap">
+  <div class="card">
+    <div class="card-title">Аналитика хлебозавода</div>
+    <div class="card-sub">Вставь текст из Telegram — всё разберётся автоматически</div>
+    <textarea id="input" placeholder="Анализ заказ на 05.05.2026. Всего-35010, хлеб-28758..."></textarea>
+    <div class="btn-row">
+      <button onclick="parseAndSave()">Добавить день</button>
+      <button class="btn-sec" onclick="loadDemo()">Загрузить 3 дня для теста</button>
+    </div>
+  </div>
+
+  <div id="main" class="hidden">
+    <div class="card" id="stats-card"></div>
+    <div class="card">
+      <div class="card-title">Выводы дня</div>
+      <div id="insights"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Категории — сравнение</div>
+      <div class="chart-wrap"><canvas id="catChart" height="200"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Сорта хлеба</div>
+      <div id="sorts-bars"></div>
+    </div>
+    <div class="card" id="trend-card" class="hidden">
+      <div class="card-title">Тренд по дням</div>
+      <div class="tabs" id="trend-tabs"></div>
+      <div class="chart-wrap"><canvas id="trendChart" height="180"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">История записей</div>
+      <div id="history-list"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const KEY='bak_v3';
+let catChart=null, trendChart=null, activeTrend='total';
+
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return[]}}
+function save(arr){localStorage.setItem(KEY,JSON.stringify(arr))}
+
+function parseText(txt){
+  const r={date:null,total:null,bread:null,slice:null,lavash:null,bun:null,suhar:null,cash:null,issued:null,sorts:{}};
+  const dm=txt.match(/(\d{2}\.\d{2}\.\d{4})/);
+  if(dm)r.date=dm[1];
+  [['total',/всего[-–—:]\s*([\d\s]+)/i],['bread',/хлеб[-–—:]\s*([\d\s]+)/i],
+   ['slice',/нарезка[-–—:]\s*([\d\s]+)/i],['lavash',/лаваш[-–—:]\s*([\d\s]+)/i],
+   ['bun',/булка[-–—:]\s*([\d\s]+)/i],['suhar',/сухарь[^,\n]*[-–—:]\s*([\d\s]+)/i],
+   ['issued',/выдано[-–—:]\s*([\d\s]+)/i],['cash',/касса[-–—:]\s*([\d\s]+)/i]
+  ].forEach(([k,rx])=>{const m=txt.match(rx);if(m)r[k]=parseInt(m[1].replace(/\s/g,''))});
+  ['золотистый','карельский','ржаное очарование','царское зерно','бородинский','добрый','тостовый'].forEach(n=>{
+    const m=txt.match(new RegExp(n+'\\s*[-–—:]\\s*([\\d\\s]+)','i'));
+    if(m)r.sorts[n]=parseInt(m[1].replace(/\s/g,''));
+  });
+  return r;
+}
+
+function fmt(n){return n!=null?n.toLocaleString('ru'):'—'}
+function fmtK(n){return n!=null?(n>=1000000?(n/1000000).toFixed(1)+'М':(n>=1000?Math.round(n/1000)+'к':n)):'—'}
+
+function diffPill(a,b){
+  if(a==null||b==null)return'';
+  const d=a-b,p=(b>0?d/b*100:0).toFixed(1);
+  const s=d>0?'+':'';
+  if(d>0)return`<span class="pill pill-up">${s}${d.toLocaleString('ru')} (${s}${p}%)</span>`;
+  if(d<0)return`<span class="pill pill-dn">${d.toLocaleString('ru')} (${p}%)</span>`;
+  return`<span class="pill pill-eq">без изменений</span>`;
+}
+
+function isDark(){return matchMedia('(prefers-color-scheme:dark)').matches}
+function chartColors(){
+  return{text:isDark()?'#c2c0b6':'#3d3d3a',grid:isDark()?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}
+}
+
+function renderStats(cur,prev){
+  const el=document.getElementById('stats-card');
+  el.innerHTML=`<div class="card-title">${cur.date||'Без даты'}</div>
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-val">${fmt(cur.total)}</div><div class="stat-lbl">Всего шт</div><div class="stat-diff">${diffPill(cur.total,prev?.total)}</div></div>
+    <div class="stat"><div class="stat-val">${fmtK(cur.cash)}</div><div class="stat-lbl">Касса руб</div><div class="stat-diff">${diffPill(cur.cash,prev?.cash)}</div></div>
+    <div class="stat"><div class="stat-val">${fmtK(cur.issued)}</div><div class="stat-lbl">Выдано руб</div><div class="stat-diff">${diffPill(cur.issued,prev?.issued)}</div></div>
+  </div>`;
+}
+
+function renderInsights(cur,prev){
+  const el=document.getElementById('insights');
+  const ins=[];
+  if(!prev){ins.push({t:'info',m:'Первая запись. Добавь ещё день — появится сравнение.'});}
+  else{
+    [{k:'slice',n:'Нарезка'},{k:'bread',n:'Хлеб'},{k:'lavash',n:'Лаваш'},{k:'bun',n:'Булка'}].forEach(({k,n})=>{
+      if(cur[k]!=null&&prev[k]!=null){
+        const d=cur[k]-prev[k],p=(d/prev[k]*100).toFixed(1);
+        if(Math.abs(p)>=3)ins.push({t:d>0?'good':'warn',m:`${n}: ${d>0?'больше':'меньше'} на ${Math.abs(d).toLocaleString('ru')} шт (${Math.abs(p)}%)`});
+      }
+    });
+    Object.entries(cur.sorts).forEach(([name,val])=>{
+      const pv=prev.sorts[name];
+      if(pv!=null){const d=val-pv,p=(d/pv*100).toFixed(1);if(Math.abs(p)>=8)ins.push({t:d>0?'good':'warn',m:`${name.charAt(0).toUpperCase()+name.slice(1)}: ${d>0?'рост':'падение'} ${Math.abs(p)}%`});}
+    });
+    if(cur.cash!=null&&prev.cash!=null){const d=cur.cash-prev.cash,p=(d/prev.cash*100).toFixed(1);if(Math.abs(p)>=2)ins.push({t:d>0?'good':'warn',m:`Касса ${d>0?'выросла':'упала'} на ${Math.abs(p)}% — ${Math.abs(d).toLocaleString('ru')} руб`});}
+  }
+  if(!ins.length)ins.push({t:'info',m:'Показатели стабильны.'});
+  el.innerHTML=ins.map(i=>`<div class="insight ${i.t}">${i.m}</div>`).join('');
+}
+
+function renderCatChart(cur,prev){
+  const cats=[{k:'slice',n:'Нарезка'},{k:'lavash',n:'Лаваш'},{k:'bun',n:'Булка'},{k:'suhar',n:'Сухарь'}];
+  const labels=cats.map(c=>c.n);
+  const vals=cats.map(c=>cur[c.k]||0);
+  const prevVals=prev?cats.map(c=>prev[c.k]||0):null;
+  const {text,grid}=chartColors();
+  if(catChart)catChart.destroy();
+  catChart=new Chart(document.getElementById('catChart'),{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Сегодня',data:vals,backgroundColor:'rgba(29,158,117,0.8)',borderRadius:6,borderSkipped:false},
+        ...(prevVals?[{label:'Вчера',data:prevVals,backgroundColor:'rgba(29,158,117,0.2)',borderRadius:6,borderSkipped:false}]:[])
+      ]
+    },
+    options:{responsive:true,plugins:{legend:{labels:{color:text,font:{size:11}}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw.toLocaleString('ru')}`}}},scales:{x:{ticks:{color:text,font:{size:11}},grid:{color:grid}},y:{ticks:{color:text,font:{size:11},callback:v=>v.toLocaleString('ru')},grid:{color:grid}}}}
+  });
+}
+
+function renderSortsBars(cur,prev){
+  const el=document.getElementById('sorts-bars');
+  const entries=Object.entries(cur.sorts).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length){el.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary)">Нет данных по сортам</div>';return;}
+  const max=Math.max(...entries.map(e=>e[1]),1);
+  const colors=['#1D9E75','#534AB7','#D85A30','#378ADD','#639922','#BA7517','#D4537E'];
+  el.innerHTML=entries.map(([name,val],i)=>{
+    const pv=prev?.sorts[name];
+    const pct=Math.round(val/max*100);
+    const diffStr=pv!=null?diffPill(val,pv):'';
+    return`<div class="bar-row">
+      <div class="bar-label" title="${name}">${name.charAt(0).toUpperCase()+name.slice(1)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${colors[i%colors.length]}"></div></div>
+      <div class="bar-val">${val.toLocaleString('ru')} ${diffStr}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderTrend(records){
+  const el=document.getElementById('trend-card');
+  if(records.length<2){el.style.display='none';return;}
+  el.style.display='block';
+  const keys=[
+    {k:'total',n:'Всего'},{k:'bread',n:'Хлеб'},{k:'slice',n:'Нарезка'},
+    {k:'lavash',n:'Лаваш'},{k:'bun',n:'Булка'}
+  ];
+  const tabs=document.getElementById('trend-tabs');
+  tabs.innerHTML=keys.map(k=>`<button class="tab${activeTrend===k.k?' active':''}" onclick="switchTrend('${k.k}')">${k.n}</button>`).join('');
+  const labels=records.map(r=>r.date||'?');
+  const data=records.map(r=>r[activeTrend]||0);
+  const {text,grid}=chartColors();
+  if(trendChart)trendChart.destroy();
+  trendChart=new Chart(document.getElementById('trendChart'),{
+    type:'line',
+    data:{labels,datasets:[{label:keys.find(k=>k.k===activeTrend)?.n||'',data,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',tension:0.35,pointRadius:4,pointBackgroundColor:'#1D9E75',fill:true}]},
+    options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw.toLocaleString('ru')} шт`}}},scales:{x:{ticks:{color:text,font:{size:11}},grid:{color:grid}},y:{ticks:{color:text,font:{size:11},callback:v=>v.toLocaleString('ru')},grid:{color:grid}}}}
+  });
+}
+
+window.switchTrend=function(k){activeTrend=k;renderTrend(load());}
+
+function renderHistory(records){
+  const el=document.getElementById('history-list');
+  if(!records.length){el.innerHTML='<div style="font-size:12px;color:var(--color-text-secondary)">Пока нет записей</div>';return;}
+  el.innerHTML=records.slice().reverse().map((r,ri)=>{
+    const idx=records.length-1-ri;
+    return`<div class="rec-row" onclick="loadRecord(${idx})">
+      <span>${r.date||'Без даты'} — ${fmt(r.total)} шт</span>
+      <span style="color:var(--color-text-tertiary)">${fmtK(r.cash)} руб</span>
+    </div>`;
+  }).join('');
+}
+
+function renderAll(records,idx){
+  const cur=records[idx];
+  const prev=idx>0?records[idx-1]:null;
+  document.getElementById('main').classList.remove('hidden');
+  renderStats(cur,prev);
+  renderInsights(cur,prev);
+  renderCatChart(cur,prev);
+  renderSortsBars(cur,prev);
+  renderTrend(records);
+  renderHistory(records);
+}
+
+window.loadRecord=function(idx){const r=load();renderAll(r,idx);}
+
+window.parseAndSave=function(){
+  const txt=document.getElementById('input').value.trim();
+  if(!txt){alert('Вставь текст из Telegram');return;}
+  const parsed=parseText(txt);
+  if(!parsed.total&&!parsed.bread){alert('Не удалось разобрать. Проверь формат.');return;}
+  const records=load();
+  const ei=records.findIndex(r=>r.date===parsed.date);
+  if(ei>=0)records[ei]=parsed; else records.push(parsed);
+  records.sort((a,b)=>{
+    if(!a.date||!b.date)return 0;
+    return a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join(''));
+  });
+  save(records);
+  const idx=records.findIndex(r=>r.date===parsed.date);
+  renderAll(records,idx);
+  document.getElementById('input').value='';
+};
+
+window.loadDemo=function(){
+  const demo=[
+    `Анализ заказ на 03.05.2026. Всего-34200, хлеб-27500, нарезка-23800, лаваш-1400, булка-4100, сухарь пасхальный-60. Золотистый-1620, карельский-810, ржаное очарование-390, царское зерно-510, бородинский-1380, добрый-870, тостовый-1020. Выдано-860000 Касса-4420000`,
+    `Анализ заказ на 04.05.2026. Всего-34800, хлеб-28100, нарезка-23200, лаваш-1550, булка-4400, сухарь пасхальный-50. Золотистый-1580, карельский-790, ржаное очарование-360, царское зерно-500, бородинский-1290, добрый-910, тостовый-1070. Выдано-875000 Касса-4490000`,
+    `Анализ заказ на 05.05.2026. Всего-35010, хлеб-28758, нарезка-22706, лаваш-1607, булка-4602, сухарь пасхальный-43. Золотистый-1543, карельский-771, ржаное очарование-347, царское зерно-485, бородинский-1212, добрый-929, тостовый-1108. Выдано-889691 Касса-4539109`
+  ];
+  const records=[];
+  demo.forEach(t=>{const p=parseText(t);if(p.total)records.push(p);});
+  save(records);
+  renderAll(records,records.length-1);
+  document.getElementById('input').value='';
+};
+
+const saved=load();
+if(saved.length)renderAll(saved,saved.length-1);
+</script>
