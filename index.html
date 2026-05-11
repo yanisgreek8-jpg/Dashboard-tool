@@ -1939,8 +1939,12 @@ async function callClaude(userMsg) {
 
   try {
     var response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+  method: 'POST',
+  headers: { 
+    'Content-Type': 'application/json',
+    'x-api-key': 'СЮДА_ВСТАВЬ_СВОЙ_КЛЮЧ',
+    'anthropic-version': '2023-06-01'
+  },,
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
