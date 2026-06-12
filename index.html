@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JARVIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#100E0B; --bg-2:#16130F; --surface:#1C1813; --surface-2:#241F19;
+    --line:#2C2620; --line-2:#3A332A;
+    --gold:#C9A961; --gold-soft:#A8915A; --gold-glow:rgba(201,169,97,0.14);
+    --up:#7FA88A; --down:#C97A5E;
+    --text:#F2EBDD; --text-dim:#9A8F7E; --text-mute:#5E564A;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  *{transition:color .2s,background-color .2s,border-color .2s,opacity .2s}
+  html,body{height:100%}
+  body{ background: radial-gradient(1200px 760px at 60% -20%, rgba(201,169,97,0.05), transparent 72%), var(--bg);
+    color:var(--text); font-family:'Manrope',system-ui,sans-serif; -webkit-font-smoothing:antialiased; overflow:hidden; font-variant-numeric:tabular-nums; }
+  .app{ display:grid; grid-template-columns:230px 1fr; grid-template-rows:1fr auto; height:100vh; }
+
+  /* SIDEBAR */
+  .sidebar{ grid-row:1/2; grid-column:1; border-right:1px solid var(--line); display:flex; flex-direction:column; padding:22px 16px; }
+  .sb-logo{ display:flex; align-items:center; gap:12px; padding:6px 10px 26px; }
+  .sb-logo .dot{ width:9px;height:9px;border-radius:50%;background:var(--gold);box-shadow:0 0 12px var(--gold);animation:pulse 3s ease-in-out infinite; }
+  @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+  .sb-logo .nm{ font-family:'Unbounded',sans-serif; font-weight:600; letter-spacing:.14em; font-size:16px; }
+  .nav{ display:flex; flex-direction:column; gap:4px; flex:1; }
+  .nav-item{ display:flex; align-items:center; gap:13px; padding:11px 12px; border-radius:11px; cursor:pointer; color:var(--text-dim); font-size:14px; font-weight:500; border:1px solid transparent; }
+  .nav-item:hover{ background:var(--surface); color:var(--text); }
+  .nav-item.on{ background:var(--surface); color:var(--gold); border-color:var(--line-2); }
+  .nav-item svg{ width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;flex-shrink:0; }
+  .sb-foot{ display:flex; flex-direction:column; gap:4px; padding-top:14px; border-top:1px solid var(--line); }
+  .sb-status{ display:flex; align-items:center; gap:9px; padding:9px 12px; font-size:11.5px; color:var(--text-dim); letter-spacing:.06em; text-transform:uppercase; }
+  .sb-status .led{ width:6px;height:6px;border-radius:50%;background:var(--text-mute); }
+  body[data-state="listening"] .sb-status .led{background:var(--up);box-shadow:0 0 8px var(--up)}
+  body[data-state="thinking"] .sb-status .led{background:var(--gold);box-shadow:0 0 8px var(--gold);animation:blink .9s infinite}
+  body[data-state="speaking"] .sb-status .led{background:var(--gold);box-shadow:0 0 8px var(--gold)}
+  @keyframes blink{50%{opacity:.25}}
+  .sb-gear{ display:flex; align-items:center; gap:13px; padding:11px 12px; border-radius:11px; cursor:pointer; color:var(--text-dim); font-size:13px; background:none; border:none; font-family:inherit; width:100%; }
+  .sb-gear:hover{ background:var(--surface); color:var(--gold); }
+  .sb-gear svg{ width:17px;height:17px;fill:currentColor }
+
+  /* MAIN */
+  .main{ grid-column:2; grid-row:1/2; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:0 28px; height:62px; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .topbar .vtitle{ font-family:'Unbounded',sans-serif; font-size:15px; font-weight:500; letter-spacing:.02em; }
+  .topbar .tr{ display:flex; align-items:center; gap:18px; }
+  .convo-toggle{ display:flex; align-items:center; gap:9px; cursor:pointer; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); user-select:none; }
+  .convo-toggle .sw{ width:34px; height:19px; border-radius:100px; background:var(--surface-2); border:1px solid var(--line-2); position:relative; }
+  .convo-toggle .sw::after{ content:''; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%; background:var(--text-mute); transition:.2s; }
+  .convo-toggle.on .sw{ background:rgba(201,169,97,.2); border-color:var(--gold-soft); }
+  .convo-toggle.on .sw::after{ left:16px; background:var(--gold); }
+  .convo-toggle.on{ color:var(--gold); }
+  .clock{ font-size:12px; color:var(--text-dim) } .clock b{ color:var(--text); font-weight:600 }
+
+  .content{ flex:1; overflow-y:auto; min-height:0; }
+  .content::-webkit-scrollbar{width:7px} .content::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px}
+  .view{ display:none; } .view.on{ display:block; }
+
+  /* HOME */
+  .home{ height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px; }
+  .orb-wrap{ position:relative; width:min(40vh,320px); height:min(40vh,320px); display:flex; align-items:center; justify-content:center; }
+  canvas#viz{ position:absolute; inset:0; width:100%; height:100% }
+  .orb{ position:relative; z-index:2; width:32%; height:32%; border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, rgba(201,169,97,0.35), transparent 62%), var(--surface);
+    border:1px solid var(--line-2); display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:inset 0 0 36px rgba(0,0,0,.55); }
+  .orb:hover{transform:scale(1.05)} .orb:active{transform:scale(.96)}
+  body[data-state="listening"] .orb{ box-shadow:inset 0 0 24px rgba(0,0,0,.5),0 0 50px var(--gold-glow) }
+  .orb svg{ width:36%;height:36%;fill:var(--gold);opacity:.92 }
+  .center-cap{ margin-top:32px; text-align:center; max-width:540px; }
+  .center-cap .lead{ font-size:16px; color:var(--text-dim); line-height:1.6; min-height:24px; font-weight:300; }
+  .center-cap .lead b{ color:var(--gold); font-weight:500; }
+  .center-cap .trc{ margin-top:13px; font-size:12.5px; color:var(--text-mute); min-height:16px; }
+  .reply-big{ margin-top:22px; font-family:'Unbounded',sans-serif; font-weight:400; font-size:18px; line-height:1.5; color:var(--text); max-width:600px; max-height:34vh; overflow-y:auto; text-align:center; opacity:0; transition:opacity .4s; letter-spacing:-.01em; }
+  .reply-big.on{ opacity:1 } .reply-big::-webkit-scrollbar{width:5px} .reply-big::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
+  .shortcuts{ display:flex; gap:9px; flex-wrap:wrap; justify-content:center; margin-top:26px; }
+  .shortcuts button{ background:var(--surface); border:1px solid var(--line-2); color:var(--text-dim); border-radius:100px; padding:8px 16px; font-family:inherit; font-size:12.5px; cursor:pointer; }
+  .shortcuts button:hover{ color:var(--gold); border-color:var(--gold-soft); transform:translateY(-1px); }
+
+  /* generic view padding */
+  .pad{ padding:30px 36px; max-width:1100px; }
+  .view-h{ font-family:'Unbounded',sans-serif; font-size:22px; font-weight:500; margin-bottom:5px; }
+  .view-sub{ color:var(--text-dim); font-size:13.5px; font-weight:300; margin-bottom:26px; }
+
+  /* MARKET */
+  .coin-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; margin-bottom:30px; }
+  .coin-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:17px 18px; cursor:pointer; }
+  .coin-card:hover{ background:var(--surface-2); transform:translateY(-2px); border-color:var(--line-2); }
+  .coin-card .cc-sym{ font-size:13px; color:var(--text-mute); letter-spacing:.08em; font-weight:600; }
+  .coin-card .cc-price{ font-size:21px; font-weight:600; margin-top:9px; }
+  .coin-card .cc-ch{ font-size:12.5px; margin-top:5px; font-weight:500; }
+  .market-cols{ display:grid; grid-template-columns:1fr 300px; gap:22px; }
+  @media(max-width:900px){ .market-cols{ grid-template-columns:1fr; } }
+  .panel-box{ background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:20px; }
+  .panel-box h3{ font-size:11px; letter-spacing:.12em; color:var(--text-mute); text-transform:uppercase; font-weight:600; margin-bottom:16px; }
+  .pf-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .pf-top .pt{ font-size:24px; color:var(--gold); font-weight:600; font-family:'Unbounded',sans-serif }
+  .pf-edit{ background:none; border:1px solid var(--line-2); color:var(--text-dim); font-size:11px; border-radius:100px; padding:5px 12px; cursor:pointer }
+  .pf-edit:hover{color:var(--gold);border-color:var(--gold-soft)}
+  .pf-list{ display:flex; flex-direction:column; gap:9px; }
+  .pf-item{ display:flex; align-items:center; justify-content:space-between; font-size:13.5px; }
+  .pf-item .pa{ color:var(--text-dim) } .pf-item .pv{ color:var(--text); font-weight:500 }
+  .pf-empty{ font-size:12.5px; color:var(--text-mute); line-height:1.5; font-weight:300 }
+  .pf-editor{ display:none; margin-top:13px; } .pf-editor.on{ display:block }
+  .pf-editor input{ width:100%; background:var(--bg-2); border:1px solid var(--line-2); color:var(--text); border-radius:9px; padding:9px 11px; font-family:inherit; font-size:12.5px; }
+  .pf-editor input:focus{outline:none;border-color:var(--gold-soft)}
+  .pf-editor .hintp{ font-size:10.5px; color:var(--text-mute); margin-top:7px; line-height:1.4 }
+  .al-item{ display:flex; align-items:center; justify-content:space-between; font-size:13px; color:var(--text-dim); padding:6px 0; }
+  .al-item .axe{ cursor:pointer; color:var(--text-mute); padding:0 4px; } .al-item .axe:hover{ color:var(--down); }
+  .al-empty{ font-size:12px; color:var(--text-mute); font-weight:300 }
+
+  /* NEWS */
+  .news-filter{ display:flex; gap:9px; margin-bottom:24px; }
+  .news-filter button{ background:var(--surface); border:1px solid var(--line-2); color:var(--text-dim); border-radius:100px; padding:9px 18px; font-family:inherit; font-size:13px; cursor:pointer; }
+  .news-filter button.on{ background:var(--gold); color:#1C1407; border-color:var(--gold); font-weight:600; }
+  .news-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .news-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 17px; cursor:pointer; opacity:0; transform:translateY(6px); animation:rise .4s forwards; overflow:hidden; }
+  @keyframes rise{to{opacity:1;transform:none}}
+  .news-card:hover{ background:var(--surface-2); transform:translateY(-2px) }
+  .news-card img.thumb{ width:100%; height:140px; object-fit:cover; border-radius:9px; margin-bottom:13px; display:block; background:var(--surface-2); }
+  .news-card .nh{ font-size:14.5px; line-height:1.4; color:var(--text); font-weight:600 }
+  .news-card .nsum{ font-size:12.5px; line-height:1.55; color:var(--text-dim); margin-top:8px; font-weight:300 }
+  .news-card .nmeta{ display:flex; align-items:center; justify-content:space-between; margin-top:12px; font-size:10px; letter-spacing:.04em; color:var(--text-mute); text-transform:uppercase; }
+  .news-card .nmeta .play{ color:var(--gold); }
+  .news-empty{ color:var(--text-mute); font-size:13px; padding:40px 12px; line-height:1.7; font-weight:300; grid-column:1/-1; text-align:center; }
+
+  /* SECRETARY */
+  .sec-cols{ display:grid; grid-template-columns:300px 1fr; gap:22px; }
+  @media(max-width:900px){ .sec-cols{ grid-template-columns:1fr; } }
+  .brief-cta{ width:100%; background:var(--gold); color:#1C1407; border:none; border-radius:12px; padding:14px; font-family:inherit; font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px; }
+  .brief-cta:hover{ background:#d8b96e; transform:translateY(-1px) } .brief-cta svg{ width:15px;height:15px;fill:#1C1407 }
+  .brief-text{ margin-top:14px; font-size:13.5px; line-height:1.65; color:var(--text-dim); display:none; } .brief-text.on{ display:block; }
+  .brief-wave{ display:none; gap:3px; align-items:flex-end; height:20px; margin-top:14px; } .brief-wave.on{ display:flex; }
+  .brief-wave i{ width:3px; background:var(--gold); border-radius:2px; animation:eq 1s ease-in-out infinite; }
+  @keyframes eq{0%,100%{height:4px}50%{height:18px}}
+  .task-wrap{ display:flex; flex-direction:column; height:520px; max-height:64vh; }
+  .tbody{ flex:1; overflow-y:auto; padding:4px 2px 14px; display:flex; flex-direction:column; gap:12px; }
+  .tbody::-webkit-scrollbar{width:5px} .tbody::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
+  .task-note{ font-size:12.5px; line-height:1.6; color:var(--text-mute); } .task-note b{ color:var(--text-dim); font-weight:600; }
+  .task-msg{ font-size:13.5px; line-height:1.55; padding:11px 14px; border-radius:12px; }
+  .task-msg.u{ background:var(--surface-2); color:var(--text); align-self:flex-end; max-width:88%; }
+  .task-msg.j{ background:var(--surface); border:1px solid var(--line); color:var(--text-dim); max-width:94%; }
+  .task-msg.file{ background:none; border:1px dashed var(--gold-soft); color:var(--gold); align-self:flex-end; font-size:12.5px; }
+  .task-input{ border-top:1px solid var(--line); padding:14px 0 0; display:flex; gap:9px; align-items:center; }
+  .task-input .clip{ background:none; border:1px solid var(--line-2); color:var(--text-dim); width:40px;height:40px; border-radius:10px; cursor:pointer; display:flex;align-items:center;justify-content:center; flex-shrink:0; }
+  .task-input .clip:hover{ color:var(--gold); border-color:var(--gold-soft) } .task-input .clip svg{ width:18px;height:18px;fill:currentColor }
+  .task-input input[type=text]{ flex:1; background:var(--bg-2); border:1px solid var(--line-2); color:var(--text); border-radius:10px; padding:11px 14px; font-family:inherit; font-size:13.5px; }
+  .task-input input[type=text]:focus{ outline:none; border-color:var(--gold-soft) }
+  .task-input button.go{ background:var(--surface-2); border:1px solid var(--line-2); color:var(--gold); border-radius:10px; width:40px;height:40px; cursor:pointer; font-size:16px; flex-shrink:0; }
+
+  /* TICKER */
+  .ticker{ grid-column:1/3; grid-row:2; border-top:1px solid var(--line); overflow:hidden; height:42px; display:flex; align-items:center }
+  .ttrack{ display:flex; gap:34px; white-space:nowrap; animation:scroll 44s linear infinite; padding-left:34px }
+  .ticker:hover .ttrack{animation-play-state:paused}
+  @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .tk{ font-size:12px; display:flex; gap:7px; align-items:center; color:var(--text-dim) }
+  .tk .sym{color:var(--text);font-weight:600} .tk .pos{color:var(--up)} .tk .neg{color:var(--down)}
+
+  /* OVERLAY */
+  .viz-overlay{ position:fixed; inset:0; z-index:55; background:rgba(10,8,6,.84); backdrop-filter:blur(7px); display:none; align-items:center; justify-content:center; padding:30px; }
+  .viz-overlay.on{ display:flex; }
+  .viz-box{ background:var(--surface); border:1px solid var(--line-2); border-radius:18px; width:min(780px,94vw); max-height:88vh; overflow:auto; padding:24px; position:relative; }
+  .viz-box .viz-title{ font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); font-weight:600; margin-bottom:18px; padding-right:30px; }
+  .viz-close{ position:absolute; top:16px; right:16px; background:none; border:1px solid var(--line-2); color:var(--text-dim); width:30px; height:30px; border-radius:9px; cursor:pointer; font-size:14px; }
+  .viz-close:hover{ color:var(--gold); border-color:var(--gold-soft) }
+  .viz-content{ min-height:120px; display:flex; align-items:center; justify-content:center; }
+  .viz-content img{ max-width:100%; border-radius:12px; } .viz-content canvas{ max-width:100%; } .viz-content svg{ max-width:100%; height:auto; }
+  .viz-content .vload{ color:var(--text-dim); font-size:13px; font-weight:300; }
+  .chart-periods{ display:flex; gap:7px; justify-content:center; margin-bottom:16px; }
+  .chart-periods .cp{ background:none; border:1px solid var(--line-2); color:var(--text-dim); border-radius:100px; padding:5px 14px; font-family:inherit; font-size:12px; cursor:pointer; }
+  .chart-periods .cp.on{ background:var(--gold); color:#1C1407; border-color:var(--gold); font-weight:600; }
+
+  /* GATE */
+  .gate{ position:fixed; inset:0; z-index:60; background:rgba(10,8,6,.9); backdrop-filter:blur(9px); display:flex; align-items:center; justify-content:center; padding:24px }
+  .gate-card{ background:var(--surface); border:1px solid var(--line-2); border-radius:18px; padding:30px; max-width:460px; width:100%; max-height:90vh; overflow-y:auto }
+  .gate-card h3{ font-family:'Unbounded',sans-serif; font-size:18px; margin-bottom:7px; font-weight:500 }
+  .gate-card p{ color:var(--text-dim); font-size:12.5px; line-height:1.6; margin-bottom:16px; font-weight:300 }
+  .gate-card label{ display:block; font-size:11px; letter-spacing:.06em; color:var(--text-dim); text-transform:uppercase; margin:4px 0 8px; font-weight:600 }
+  .gate-card .opt{color:var(--gold-soft)}
+  .gate-card input{ width:100%; background:var(--bg-2); border:1px solid var(--line-2); color:var(--text); border-radius:10px; padding:11px 13px; font-family:inherit; font-size:13px; margin-bottom:14px }
+  .gate-card input:focus{outline:none;border-color:var(--gold-soft)}
+  .gate-card .divider{height:1px;background:var(--line);margin:6px 0 18px}
+  .gate-card button.primary{ width:100%; background:var(--gold); color:#1C1407; border:none; padding:13px; border-radius:11px; font-weight:600; font-size:14px; cursor:pointer; font-family:inherit }
+  .gate-card button.primary:hover{ background:#d8b96e }
+  .gate-card .note{ font-size:11px; color:var(--text-mute); margin-top:14px; line-height:1.6; font-weight:300 } .gate-card .note a{color:var(--gold-soft)}
+
+  @media (max-width:820px){
+    .app{ grid-template-columns:1fr; grid-template-rows:auto 1fr auto; }
+    .sidebar{ grid-column:1; grid-row:1; flex-direction:row; padding:10px; border-right:none; border-bottom:1px solid var(--line); align-items:center; overflow-x:auto; }
+    .sb-logo{ padding:6px 12px 6px 6px; } .sb-logo .nm{display:none}
+    .nav{ flex-direction:row; gap:4px; flex:1; } .nav-item{ padding:9px 12px; white-space:nowrap; } .nav-item span{display:none}
+    .sb-foot{ flex-direction:row; border-top:none; padding-top:0; } .sb-status{display:none} .sb-gear span{display:none}
+    .main{ grid-column:1; grid-row:2; } .ticker{ grid-column:1/2; }
+    .pad{ padding:22px 18px; }
+  }
+</style>
+</head>
+<body data-state="idle">
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-logo"><span class="dot"></span><span class="nm">JARVIS</span></div>
+    <nav class="nav" id="nav">
+      <div class="nav-item on" data-tab="home"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Джарвис</span></div>
+      <div class="nav-item" data-tab="market"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 4 8-9"/><path d="M3 21h18"/></svg><span>Рынок</span></div>
+      <div class="nav-item" data-tab="news"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>Новости</span></div>
+      <div class="nav-item" data-tab="work"><svg viewBox="0 0 24 24"><path d="M9 5h6M9 5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2M9 5V4M9 11l1.5 1.5L13 10M9 15l1.5 1.5L13 13"/></svg><span>Секретарь</span></div>
+    </nav>
+    <div class="sb-foot">
+      <div class="sb-status"><span class="led"></span><span id="statusText">ожидание</span></div>
+      <button class="sb-gear" id="gearBtn"><svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.68 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.32.68.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.25.1.54.02.68-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg><span>Настройки</span></button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <header class="topbar">
+      <span class="vtitle" id="vtitle">Джарвис</span>
+      <div class="tr">
+        <span class="convo-toggle" id="convoToggle" title="Режим живого разговора"><span class="sw"></span>разговор</span>
+        <span class="clock" id="clock">--:--:--</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- HOME -->
+      <section class="view on" data-view="home">
+        <div class="home">
+          <div class="orb-wrap">
+            <canvas id="viz"></canvas>
+            <div class="orb" id="orb" title="Нажми и говори"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></div>
+          </div>
+          <div class="center-cap">
+            <div class="lead" id="lead">Нажми на ядро и говори. Спроси «<b>что в экономике?</b>», «<b>график биткоина</b>» или включи режим разговора.</div>
+            <div class="trc" id="trc"></div>
+          </div>
+          <div class="reply-big" id="replyBig"></div>
+          <div class="shortcuts">
+            <button data-act="chart:bitcoin:30">График BTC</button>
+            <button data-act="ask:Что главное в экономике прямо сейчас, коротко?">Экономика</button>
+            <button data-act="ask:Что нового в DeFi сегодня?">DeFi</button>
+            <button data-act="brief">Брифинг дня</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- MARKET -->
+      <section class="view" data-view="market">
+        <div class="pad">
+          <div class="view-h">Рынок</div>
+          <div class="view-sub">Живые цены · клик по монете открывает график</div>
+          <div class="coin-grid" id="coinGrid"></div>
+          <div class="market-cols">
+            <div class="panel-box">
+              <h3>Портфель</h3>
+              <div class="pf-top"><span class="pt" id="pfTotal">$0</span>
+                <button class="pf-edit" id="pfEditBtn">изменить</button></div>
+              <div class="pf-list" id="pfList"><div class="pf-empty">Пусто — нажми «изменить» и впиши свои монеты.</div></div>
+              <div class="pf-editor" id="pfEditor">
+                <input id="pfInput" placeholder="0.5 BTC, 3 ETH, 1200 SOL" />
+                <div class="hintp">Монеты: BTC ETH SOL ARB LINK PENDLE AAVE GMX. Enter — сохранить.</div>
+              </div>
+            </div>
+            <div class="panel-box">
+              <h3>Алерты по цене</h3>
+              <div id="alertsList"><div class="al-empty">Скажи Джарвису: «уведоми, когда BTC выше 70000».</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NEWS -->
+      <section class="view" data-view="news">
+        <div class="pad">
+          <div class="view-h">Новости</div>
+          <div class="view-sub">Свежее из мира денег · клик по карточке — Джарвис доложит голосом</div>
+          <div class="news-filter" id="newsFilter">
+            <button class="on" data-cat="economy">Экономика</button>
+            <button data-cat="crypto">Крипто</button>
+            <button data-cat="world">Мир</button>
+          </div>
+          <div class="news-grid" id="newsBody"><div class="news-empty">Выбери раздел — Джарвис соберёт свежие новости.</div></div>
+        </div>
+      </section>
+
+      <!-- WORK -->
+      <section class="view" data-view="work">
+        <div class="pad">
+          <div class="view-h">Секретарь</div>
+          <div class="view-sub">Задания, анализ таблиц и эфир дня</div>
+          <div class="sec-cols">
+            <div class="panel-box">
+              <h3>Эфир дня</h3>
+              <button class="brief-cta" id="briefBtn"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Собрать выпуск</button>
+              <div class="brief-wave" id="briefWave"><i style="animation-delay:0s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.25s"></i></div>
+              <div class="brief-text" id="briefText"></div>
+            </div>
+            <div class="panel-box">
+              <h3>Задания · таблицы</h3>
+              <div class="task-wrap">
+                <div class="tbody" id="taskBody">
+                  <div class="task-note"><b>Я твой секретарь.</b> Дай задание, кину вопрос, или прикрепи таблицу Excel (скрепка) — разберу данные и отвечу. Реальные клики в компе — через Claude в Chrome.</div>
+                </div>
+                <div class="task-input">
+                  <button class="clip" id="clipBtn" title="Прикрепить таблицу"><svg viewBox="0 0 24 24"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6h-1.5z"/></svg></button>
+                  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none" />
+                  <input type="text" id="taskInputEl" placeholder="Дай задание…" />
+                  <button class="go" id="taskSend">→</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="ticker"><div class="ttrack" id="ttrack"><span class="tk" style="color:var(--text-mute)">загружаю рынок…</span></div></div>
+</div>
+
+<div class="viz-overlay" id="vizOverlay">
+  <div class="viz-box"><button class="viz-close" id="vizClose">✕</button>
+    <div class="viz-title" id="vizTitle">визуал</div><div class="viz-content" id="vizContent"></div></div>
+</div>
+
+<div class="gate" id="gate" style="display:none">
+  <div class="gate-card">
+    <h3>Настройки Джарвиса</h3>
+    <p>Ключи хранятся только в твоём браузере (localStorage) и никуда не уходят.</p>
+    <label>Ключ Anthropic <span style="color:var(--down)">· обязательно</span></label>
+    <input id="keyInput" type="password" placeholder="sk-ant-..." autocomplete="off" />
+    <div class="divider"></div>
+    <label>Ключ ElevenLabs <span class="opt">· опционально — живой голос</span></label>
+    <input id="elevenInput" type="password" placeholder="пусто = браузерный голос" autocomplete="off" />
+    <label>ID голоса ElevenLabs</label>
+    <input id="voiceInput" type="text" placeholder="pNInz6obpgDQGcFmaJgB (Adam)" autocomplete="off" />
+    <button id="testVoice" style="width:100%;background:var(--surface-2);color:var(--gold);border:1px solid var(--gold-soft);padding:11px;border-radius:11px;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:10px">🔊 Проверить голос</button>
+    <div id="voiceStatus" style="font-size:11.5px;line-height:1.5;margin-bottom:14px;min-height:16px;color:var(--text-dim);font-weight:300"></div>
+    <button class="primary" id="saveKey">Сохранить и запустить</button>
+    <div class="note">
+      Anthropic — <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys.<br>
+      ElevenLabs — <a href="https://elevenlabs.io" target="_blank">elevenlabs.io</a> → API Key. Бесплатно: Adam — pNInz6obpgDQGcFmaJgB.<br>
+      Графики, схемы, картинки, таблицы — без доп. ключей. Голос лучше в Chrome.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   JARVIS v0.7 — навигация по вкладкам, премиальный Ondo-стиль
+   ============================================================ */
+const CONFIG={
+  model:'claude-sonnet-4-6', maxTokens:1100, voiceLang:'ru-RU', elevenModel:'eleven_multilingual_v2',
+  systemPrompt:`Ты — Джарвис, личный ассистент и секретарь Ивана: спокойный, умный, с лёгкой иронией, говоришь по-человечески.
+С тобой можно просто разговаривать — живой диалог, мнение, уместный юмор. На «ты», можно «брат»/«друг».
+Темы: крипта/DeFi, экономика и макро (ставки ЦБ/ФРС, инфляция, валюты, фондовый рынок, сырьё), бизнес, мировые финансы, работа Ивана, и просто человеческие темы.
+Контекст Ивана: консервативный DeFi-инвестор (цель 5–15% APY; Aave, Morpho, Pendle PT/YT/LP, GM-пулы на GMX) и владелец бизнеса.
+Для свежих событий/котировок/новостей ОБЯЗАТЕЛЬНО используй web_search, не выдумывай актуальные данные.
+Отвечай как для произнесения вслух: живые короткие фразы, без таблиц и markdown, без длинных списков. Риски — одной ёмкой фразой.
+ВИЗУАЛ. Когда уместно ПОКАЗАТЬ — добавь В КОНЕЦ ответа один тег на отдельной строке (он не озвучивается):
+- [CHART:монета:дни] монета из bitcoin,ethereum,solana,arbitrum,chainlink,pendle,aave,gmx; дни 7,30,90,365
+- [DIAGRAM:короткое описание схемы]
+- [IMAGE:короткое описание на английском]
+АЛЕРТ: если Иван просит уведомить о цене — добавь [ALERT:монета:>:цена] (выше) или [ALERT:монета:<:цена] (ниже) и подтверди словами. Пример: «скажи когда биткоин выше 70000» → [ALERT:bitcoin:>:70000]`
+};
+const COINS=['bitcoin','ethereum','solana','arbitrum','chainlink','pendle','aave','gmx'];
+const SYMID={BTC:'bitcoin',ETH:'ethereum',SOL:'solana',ARB:'arbitrum',LINK:'chainlink',PENDLE:'pendle',AAVE:'aave',GMX:'gmx'};
+const COINNAME={bitcoin:'Bitcoin',ethereum:'Ethereum',solana:'Solana',arbitrum:'Arbitrum',chainlink:'Chainlink',pendle:'Pendle',aave:'Aave',gmx:'GMX'};
+const VIEWTITLE={home:'Джарвис',market:'Рынок',news:'Новости',work:'Секретарь'};
+
+let ANTHROPIC_KEY=localStorage.getItem('jarvis_key')||'';
+let ELEVEN_KEY=localStorage.getItem('jarvis_eleven')||'';
+let VOICE_ID=localStorage.getItem('jarvis_voice')||'pNInz6obpgDQGcFmaJgB';
+let portfolio=JSON.parse(localStorage.getItem('jarvis_pf')||'[]');
+let alerts=JSON.parse(localStorage.getItem('jarvis_alerts')||'[]');
+let history=[]; let marketSnapshot=''; let priceMap={}; let speaking=false; let chartObj=null; let convoMode=false;
+let newsCat='economy'; let newsLoaded=false;
+
+const $=s=>document.querySelector(s);
+const statusText=$('#statusText');
+function setState(s){ document.body.dataset.state=s; statusText.textContent={idle:'ожидание',listening:'слушаю',thinking:'думаю',speaking:'говорю'}[s]||s; }
+
+try{ if(window.mermaid) mermaid.initialize({startOnLoad:false, theme:'dark', themeVariables:{ primaryColor:'#1C1813', primaryBorderColor:'#A8915A', primaryTextColor:'#F2EBDD', lineColor:'#C9A961', fontFamily:'Manrope' }}); }catch(e){}
+
+function tick(){ const d=new Date(); $('#clock').innerHTML=`<b>${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</b>:${String(d.getSeconds()).padStart(2,'0')}`; }
+setInterval(tick,1000); tick();
+
+/* ---- НАВИГАЦИЯ ВКЛАДКИ ---- */
+function switchTab(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on', v.dataset.view===name));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('on', n.dataset.tab===name));
+  $('#vtitle').textContent=VIEWTITLE[name]||'';
+  if(name==='news' && !newsLoaded){ loadNews(newsCat); }
+}
+document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchTab(n.dataset.tab)));
+
+/* ---- ЦЕНЫ ---- */
+async function loadMarket(){
+  try{ const url=`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${COINS.join(',')}&price_change_percentage=24h`;
+    const data=await (await fetch(url)).json(); priceMap={}; data.forEach(c=>priceMap[c.id]=c.current_price);
+    renderTicker(data); renderCoinGrid(data); buildSnapshot(data); renderPortfolio(); checkAlerts();
+  }catch(e){ console.warn('cg',e); $('#ttrack').innerHTML='<span class="tk" style="color:var(--down)">рынок недоступен</span>'; }
+}
+function fmt(n){ if(n>=1000)return '$'+n.toLocaleString('en-US',{maximumFractionDigits:0}); if(n>=1)return '$'+n.toFixed(2); return '$'+n.toFixed(4); }
+function renderTicker(data){
+  const cells=data.map(c=>{ const ch=c.price_change_percentage_24h??0,cls=ch>=0?'pos':'neg',a=ch>=0?'▲':'▼';
+    return `<span class="tk"><span class="sym">${(c.symbol||'').toUpperCase()}</span> ${fmt(c.current_price)} <span class="${cls}">${a}${Math.abs(ch).toFixed(1)}%</span></span>`; }).join('');
+  $('#ttrack').innerHTML=cells+cells;
+}
+function renderCoinGrid(data){
+  const g=$('#coinGrid'); if(!g)return;
+  g.innerHTML=data.map(c=>{ const ch=c.price_change_percentage_24h??0, cls=ch>=0?'up':'down', sign=ch>=0?'+':'';
+    return `<div class="coin-card" data-coin="${c.id}">
+      <div class="cc-sym">${(c.symbol||'').toUpperCase()}</div>
+      <div class="cc-price">${fmt(c.current_price)}</div>
+      <div class="cc-ch" style="color:var(--${cls})">${sign}${ch.toFixed(2)}%</div></div>`; }).join('');
+  g.querySelectorAll('.coin-card').forEach(card=>card.addEventListener('click',()=>showChart(card.dataset.coin,30)));
+}
+function buildSnapshot(data){ marketSnapshot=data.map(c=>`${(c.symbol||'').toUpperCase()} ${fmt(c.current_price)} (${(c.price_change_percentage_24h||0).toFixed(1)}% 24ч)`).join(', '); }
+
+/* ---- ПОРТФЕЛЬ ---- */
+function renderPortfolio(){
+  const list=$('#pfList'); if(!list)return;
+  if(!portfolio.length){ list.innerHTML='<div class="pf-empty">Пусто — нажми «изменить» и впиши свои монеты.</div>'; $('#pfTotal').textContent='$0'; return; }
+  let total=0;
+  list.innerHTML=portfolio.map(p=>{ const price=priceMap[SYMID[p.sym]]||0; const val=price*p.amount; total+=val;
+    return `<div class="pf-item"><span class="pa">${p.amount} ${p.sym}</span><span class="pv">${price?fmt(val):'—'}</span></div>`; }).join('');
+  $('#pfTotal').textContent=fmt(total);
+}
+function parsePortfolio(str){ const out=[]; str.split(',').forEach(part=>{ const m=part.trim().match(/([\d.]+)\s*([a-zA-Z]+)/); if(m){ const sym=m[2].toUpperCase(); if(SYMID[sym]) out.push({sym, amount:parseFloat(m[1])}); } }); return out; }
+$('#pfEditBtn').addEventListener('click',()=>{ const ed=$('#pfEditor'); ed.classList.toggle('on'); if(ed.classList.contains('on')){ $('#pfInput').value=portfolio.map(p=>`${p.amount} ${p.sym}`).join(', '); $('#pfInput').focus(); } });
+$('#pfInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){ portfolio=parsePortfolio(e.target.value); localStorage.setItem('jarvis_pf',JSON.stringify(portfolio)); $('#pfEditor').classList.remove('on'); renderPortfolio(); } });
+
+/* ---- АЛЕРТЫ ---- */
+function renderAlerts(){
+  const list=$('#alertsList'); if(!list)return;
+  if(!alerts.length){ list.innerHTML='<div class="al-empty">Скажи Джарвису: «уведоми, когда BTC выше 70000».</div>'; return; }
+  list.innerHTML=alerts.map((a,i)=>`<div class="al-item"><span>${a.coin.toUpperCase()} ${a.op==='>'?'≥':'≤'} ${fmt(a.price)}</span><span class="axe" data-i="${i}">✕</span></div>`).join('');
+  list.querySelectorAll('.axe').forEach(x=>x.addEventListener('click',()=>{ alerts.splice(parseInt(x.dataset.i),1); localStorage.setItem('jarvis_alerts',JSON.stringify(alerts)); renderAlerts(); }));
+}
+function checkAlerts(){
+  if(!alerts.length)return; const fired=[];
+  alerts=alerts.filter(a=>{ const p=priceMap[a.coin]; if(!p)return true;
+    const hit=(a.op==='>'&&p>=a.price)||(a.op==='<'&&p<=a.price); if(hit){ fired.push({...a,p}); return false; } return true; });
+  if(fired.length){ localStorage.setItem('jarvis_alerts',JSON.stringify(alerts)); renderAlerts();
+    fired.forEach(f=>{ const msg=`Внимание, ${f.coin.toUpperCase()} ${f.op==='>'?'выше':'ниже'} ${f.price}. Сейчас ${fmt(f.p)}.`;
+      speak(msg); try{ if(window.Notification&&Notification.permission==='granted') new Notification('JARVIS',{body:msg}); }catch(e){} }); }
+}
+
+/* ---- CLAUDE ---- */
+async function callClaude(messages,{system=CONFIG.systemPrompt,search=true,maxTokens=CONFIG.maxTokens}={}){
+  const body={ model:CONFIG.model, max_tokens:maxTokens, system, messages };
+  if(search) body.tools=[{type:'web_search_20250305',name:'web_search',max_uses:5}];
+  const res=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify(body) });
+  if(!res.ok)throw new Error('api '+res.status);
+  return await res.json();
+}
+function extractText(content){ return (content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim(); }
+function extractSources(content){ const out=[],seen=new Set();
+  for(const b of (content||[])) if(b.type==='web_search_tool_result'&&Array.isArray(b.content))
+    for(const r of b.content) if(r.type==='web_search_result'&&r.url&&!seen.has(r.url)){ seen.add(r.url); out.push({title:r.title||r.url,url:r.url}); }
+  return out; }
+function stripMd(t){ return t.replace(/\*\*/g,'').replace(/\*/g,'').replace(/#{1,6}\s/g,'').replace(/`/g,'').replace(/^\s*[-•]\s/gm,'• ').trim(); }
+
+/* ---- ДИАЛОГ ---- */
+async function ask(text){
+  if(!ANTHROPIC_KEY){ openGate(); return; }
+  switchTab('home');
+  showLeadReply('… '+text, true);
+  history.push({role:'user',content:text+(marketSnapshot?`\n\n[крипто-рынок: ${marketSnapshot}]`:'')});
+  setState('thinking');
+  try{
+    const data=await callClaude(history);
+    let reply=extractText(data.content)||'Не смог сформулировать.';
+    history.push({role:'assistant',content:reply});
+    const clean=handleVisualTags(reply);
+    showLeadReply(clean,false); speak(clean);
+  }catch(e){ console.error(e); showLeadReply('Связь с Claude оборвалась. Проверь ключ.',false); setState('idle'); resumeConvo(); }
+}
+function showLeadReply(text,isUser){ const rb=$('#replyBig'); rb.textContent=text; rb.classList.add('on'); if(isUser)$('#trc').textContent=''; }
+function handleVisualTags(reply){
+  let text=reply;
+  const chart=text.match(/\[CHART:(\w+):(\d+)\]/i), diag=text.match(/\[DIAGRAM:([^\]]+)\]/i), img=text.match(/\[IMAGE:([^\]]+)\]/i), al=text.match(/\[ALERT:(\w+):([<>]):([\d.]+)\]/i);
+  text=text.replace(/\[CHART:[^\]]+\]/ig,'').replace(/\[DIAGRAM:[^\]]+\]/ig,'').replace(/\[IMAGE:[^\]]+\]/ig,'').replace(/\[ALERT:[^\]]+\]/ig,'').trim();
+  if(al){ const coin=al[1].toLowerCase(); if(COINNAME[coin]){ alerts.push({coin,op:al[2],price:parseFloat(al[3])}); localStorage.setItem('jarvis_alerts',JSON.stringify(alerts)); renderAlerts(); if(window.Notification&&Notification.permission==='default')Notification.requestPermission(); } }
+  else if(chart){ const coin=chart[1].toLowerCase(); if(COINNAME[coin]) showChart(coin, parseInt(chart[2])||30); }
+  else if(diag){ showDiagram(diag[1].trim()); }
+  else if(img){ showImage(img[1].trim()); }
+  return stripMd(text);
+}
+
+/* ---- ВИЗУАЛ ---- */
+function openViz(title){ $('#vizTitle').textContent=title; $('#vizContent').innerHTML='<div class="vload">Готовлю визуал…</div>'; $('#vizOverlay').classList.add('on'); }
+function closeViz(){ $('#vizOverlay').classList.remove('on'); if(chartObj){ try{chartObj.destroy();}catch(e){} chartObj=null; } }
+$('#vizClose').addEventListener('click',closeViz);
+$('#vizOverlay').addEventListener('click',e=>{ if(e.target.id==='vizOverlay')closeViz(); });
+async function showChart(coin,days){
+  openViz(COINNAME[coin]||coin);
+  $('#vizContent').innerHTML=`<div style="width:100%"><div class="chart-periods">${[7,30,90,365].map(d=>`<button class="cp ${d==days?'on':''}" data-d="${d}">${d==365?'1 год':d+' дн'}</button>`).join('')}</div><canvas id="chartCanvas" height="300"></canvas></div>`;
+  $('#vizContent').querySelectorAll('.cp').forEach(b=>b.addEventListener('click',()=>drawChartData(coin,parseInt(b.dataset.d))));
+  drawChartData(coin,days);
+}
+async function drawChartData(coin,days){
+  document.querySelectorAll('.chart-periods .cp').forEach(b=>b.classList.toggle('on',parseInt(b.dataset.d)===days));
+  try{
+    const data=await (await fetch(`https://api.coingecko.com/api/v3/coins/${coin}/market_chart?vs_currency=usd&days=${days}`)).json();
+    const prices=(data.prices||[]).map(p=>({x:p[0],y:p[1]})); if(!prices.length)return;
+    const ctx=$('#chartCanvas').getContext('2d');
+    const grad=ctx.createLinearGradient(0,0,0,300); grad.addColorStop(0,'rgba(201,169,97,0.28)'); grad.addColorStop(1,'rgba(201,169,97,0)');
+    if(chartObj){try{chartObj.destroy();}catch(e){}}
+    chartObj=new Chart(ctx,{ type:'line',
+      data:{ labels:prices.map(p=>new Date(p.x).toLocaleDateString('ru-RU',{day:'numeric',month:'short'})),
+             datasets:[{ data:prices.map(p=>p.y), borderColor:'#C9A961', backgroundColor:grad, fill:true, tension:.25, pointRadius:0, borderWidth:2 }] },
+      options:{ responsive:true, plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.parsed.y.toLocaleString('en-US',{maximumFractionDigits:2})}}}, scales:{
+        x:{ ticks:{color:'#9A8F7E',maxTicksLimit:7,font:{size:10}}, grid:{color:'rgba(44,38,32,.6)'} },
+        y:{ ticks:{color:'#9A8F7E',font:{size:10},callback:v=>'$'+v.toLocaleString()}, grid:{color:'rgba(44,38,32,.6)'} } } } });
+  }catch(e){ console.error(e); $('#vizContent').innerHTML='<div class="vload">Не удалось загрузить график.</div>'; }
+}
+function showImage(prompt){
+  openViz('Картинка');
+  const src=`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=512&nologo=true&seed=${Math.floor(Math.random()*99999)}`;
+  const img=new Image(); img.alt=prompt;
+  img.onload=()=>{ $('#vizContent').innerHTML=''; $('#vizContent').appendChild(img); };
+  img.onerror=()=>{ $('#vizContent').innerHTML='<div class="vload">Не удалось сгенерировать картинку.</div>'; };
+  img.src=src;
+}
+async function showDiagram(desc){
+  openViz('Схема'); if(!window.mermaid){ $('#vizContent').innerHTML='<div class="vload">Модуль схем не загрузился.</div>'; return; }
+  try{
+    const data=await callClaude([{role:'user',content:`Нарисуй схему mermaid для: "${desc}". Верни ТОЛЬКО код mermaid (flowchart TD или graph LR), без markdown. Подписи на русском. Без скобок () и кавычек в узлах.`}],{search:false,maxTokens:700});
+    let code=extractText(data.content).replace(/```mermaid|```/g,'').trim();
+    const {svg}=await mermaid.render('mmd'+Date.now(), code); $('#vizContent').innerHTML=svg;
+  }catch(e){ console.error(e); $('#vizContent').innerHTML='<div class="vload">Не удалось построить схему.</div>'; }
+}
+
+/* ---- НОВОСТИ ---- */
+const NEWS_PROMPT={
+  economy:'5 самых свежих и важных мировых экономических и финансовых новостей на сегодня (макро, ставки, рынки, валюты)',
+  crypto:'5 самых свежих и важных новостей крипты и DeFi на сегодня (биткоин, эфир, регуляции, протоколы)',
+  world:'5 самых свежих и важных мировых новостей на сегодня (геополитика, крупные события, мир)'
+};
+async function loadNews(cat){
+  if(!ANTHROPIC_KEY){ openGate(); return; }
+  newsCat=cat; newsLoaded=true;
+  document.querySelectorAll('#newsFilter button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat));
+  const body=$('#newsBody'); body.innerHTML='<div class="news-empty">Джарвис ищет свежие новости…</div>';
+  try{
+    const prompt=`Найди через web_search ${NEWS_PROMPT[cat]}. Ответь СТРОГО валидным JSON-массивом без markdown: [{"headline":"заголовок на русском","summary":"1-2 предложения сути на русском","source":"издание"}]`;
+    const data=await callClaude([{role:'user',content:prompt}],{maxTokens:1500});
+    let txt=extractText(data.content).replace(/```json|```/g,'').trim();
+    const s=txt.indexOf('['),e=txt.lastIndexOf(']'); let items=[]; if(s>=0&&e>s){ try{ items=JSON.parse(txt.slice(s,e+1)); }catch(err){} }
+    const srcs=extractSources(data.content);
+    if(!items.length){ body.innerHTML='<div class="news-empty">Не удалось разобрать ленту. Попробуй ещё раз.</div>'; return; }
+    renderNews(items,srcs);
+  }catch(e){ console.error(e); body.innerHTML='<div class="news-empty">Ошибка загрузки. Проверь ключ.</div>'; }
+}
+function renderNews(items,srcs){
+  const body=$('#newsBody');
+  body.innerHTML=items.map((n,i)=>{ const src=srcs[i]; const url=src?src.url:'';
+    return `<div class="news-card" style="animation-delay:${i*60}ms" data-sum="${esc(n.headline+'. '+(n.summary||''))}" data-url="${url}">
+      <div class="nh">${esc(n.headline||'')}</div>${n.summary?`<div class="nsum">${esc(n.summary)}</div>`:''}
+      <div class="nmeta"><span>${esc(n.source||(url?dom(url):''))}</span><span class="play">▶ доклад</span></div></div>`; }).join('');
+  body.querySelectorAll('.news-card').forEach(card=>{ card.addEventListener('click',()=>speak(card.dataset.sum)); const url=card.dataset.url; if(url) loadNewsImage(card,url); });
+}
+function dom(u){ try{ return new URL(u).hostname.replace(/^www\./,''); }catch(e){ return ''; } }
+async function loadNewsImage(card,url){
+  try{ const r=await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`); const j=await r.json();
+    const im=j&&j.data&&j.data.image&&j.data.image.url;
+    if(im){ const el=document.createElement('img'); el.className='thumb'; el.src=im; el.onerror=()=>el.remove(); card.insertBefore(el,card.firstChild); } }catch(e){}
+}
+document.querySelectorAll('#newsFilter button').forEach(b=>b.addEventListener('click',()=>loadNews(b.dataset.cat)));
+
+/* ---- ЭФИР ---- */
+async function buildBriefing(){
+  if(!ANTHROPIC_KEY){ openGate(); return; }
+  const wave=$('#briefWave'),txt=$('#briefText'),btn=$('#briefBtn');
+  btn.disabled=true; btn.style.opacity=.6; txt.classList.remove('on'); wave.classList.add('on'); txt.textContent='';
+  try{
+    const data=await callClaude([{role:'user',content:`Сделай короткий устный аудио-брифинг дня для Ивана: 4-6 живых предложений как ведущий. Свежие события из экономики, рынков и крипты (web_search). Без списков и markdown — сплошная речь. Начни с приветствия по-джарвисовски. Без визуал-тегов.`}],{maxTokens:700});
+    const text=stripMd(extractText(data.content).replace(/\[[A-Z]+:[^\]]+\]/g,''))||'Не смог собрать выпуск.';
+    txt.textContent=text; txt.classList.add('on'); await speak(text);
+  }catch(e){ console.error(e); txt.textContent='Не удалось собрать выпуск. Проверь ключ.'; txt.classList.add('on'); }
+  finally{ wave.classList.remove('on'); btn.disabled=false; btn.style.opacity=1; }
+}
+
+/* ---- СЕКРЕТАРЬ ---- */
+async function runTask(text, extraData){
+  if(!ANTHROPIC_KEY){ openGate(); return; }
+  addTask('u',text); setState('thinking');
+  try{
+    const sys=CONFIG.systemPrompt+`\nРежим СЕКРЕТАРЯ: выполни поручение и кратко отчитайся. Если дали данные таблицы — проанализируй: ключевые цифры, тренды, аномалии, выводы. Если нужны реальные действия в компьютере — скажи, что это через Claude в Chrome.`;
+    const content = extraData ? text+`\n\nДАННЫЕ ТАБЛИЦЫ:\n${extraData}` : text;
+    const data=await callClaude([{role:'user',content}],{system:sys, search:!extraData});
+    let reply=stripMd(handleVisualTags(extractText(data.content)||'Готово.'));
+    addTask('j',reply);
+    if(extraData) speak('Готов разбор таблицы, смотри в секретаре.');
+  }catch(e){ console.error(e); addTask('j','Ошибка. Проверь ключ или размер таблицы.'); }
+  finally{ setState('idle'); }
+}
+function addTask(who,text){ const d=document.createElement('div'); d.className='task-msg '+who; d.textContent=text; $('#taskBody').appendChild(d); $('#taskBody').scrollTop=$('#taskBody').scrollHeight; }
+$('#clipBtn').addEventListener('click',()=>$('#fileInput').click());
+$('#fileInput').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) analyzeExcel(f); e.target.value=''; });
+function analyzeExcel(file){
+  if(!window.XLSX){ addTask('j','Модуль таблиц не загрузился — обнови страницу.'); return; }
+  const d=document.createElement('div'); d.className='task-msg file'; d.textContent='📊 '+file.name; $('#taskBody').appendChild(d);
+  const reader=new FileReader();
+  reader.onload=ev=>{ try{
+      const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'}); let txt='';
+      wb.SheetNames.forEach(name=>{ const csv=XLSX.utils.sheet_to_csv(wb.Sheets[name]); txt+=`Лист "${name}":\n`+csv.split('\n').slice(0,150).join('\n')+'\n\n'; });
+      if(txt.length>14000) txt=txt.slice(0,14000)+'\n…(обрезано)';
+      runTask(`Проанализируй таблицу "${file.name}" и дай вывод: главные цифры, тренды, что важно, аномалии.`, txt);
+    }catch(err){ console.error(err); addTask('j','Не смог прочитать файл. Поддерживаются .xlsx, .xls, .csv'); } };
+  reader.readAsArrayBuffer(file);
+}
+$('#taskSend').addEventListener('click',()=>{ const v=$('#taskInputEl').value.trim(); if(v){ $('#taskInputEl').value=''; runTask(v); } });
+$('#taskInputEl').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const v=e.target.value.trim(); if(v){ e.target.value=''; runTask(v); } } });
+$('#briefBtn').addEventListener('click',buildBriefing);
+
+/* ---- ГОЛОС ВХОД ---- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recog=null,listening=false,gotResult=false,listenTimer=null;
+if(SR){
+  recog=new SR(); recog.lang=CONFIG.voiceLang; recog.interimResults=true; recog.continuous=false;
+  recog.onresult=e=>{ gotResult=true; let interim='',final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal)final+=t; else interim+=t; }
+    $('#trc').textContent=(final||interim);
+    if(speaking && (interim.length>2||final)){ stopSpeak(); }
+    if(final){ stopListen(); ask(final.trim()); } };
+  recog.onerror=ev=>{ console.warn('sr',ev.error); stopListen(); };
+  recog.onend=()=>{ if(listening)stopListen(); };
+}
+function startListen(){
+  if(!recog){ $('#lead').innerHTML='Голос не поддерживается этим браузером. Открой в <b>Chrome</b>.'; return; }
+  if(speaking)stopSpeak(); gotResult=false;
+  try{ recog.start(); listening=true; setState('listening'); startViz(true); $('#trc').textContent='…';
+    clearTimeout(listenTimer); listenTimer=setTimeout(()=>{ if(listening&&!gotResult)$('#trc').innerHTML='<span style="color:var(--down)">не слышу — браузер может блокировать микрофон. Открой в Chrome.</span>'; },3500);
+  }catch(e){}
+}
+function stopListen(){ listening=false; clearTimeout(listenTimer); try{recog&&recog.stop();}catch(e){} if(document.body.dataset.state==='listening')setState('idle'); }
+function resumeConvo(){ if(convoMode && !speaking){ setTimeout(()=>{ if(convoMode&&!listening&&!speaking) startListen(); }, 400); } }
+$('#convoToggle').addEventListener('click',async()=>{
+  convoMode=!convoMode; $('#convoToggle').classList.toggle('on',convoMode);
+  if(convoMode){ switchTab('home'); await initMic(); if(!listening&&!speaking) startListen(); } else { stopListen(); }
+});
+
+/* ---- ГОЛОС ВЫХОД ---- */
+let botAudio=null,botCtx=null,botAnalyser=null,botData=null;
+async function speak(text){ const clean=stripMd(text.replace(/https?:\/\/\S+/g,'')).trim(); if(!clean){setState('idle');resumeConvo();return;}
+  if(ELEVEN_KEY){ try{ await speakEleven(clean); resumeConvo(); return; }catch(e){ console.warn('eleven fb',e); } } speakBrowser(clean); }
+async function speakEleven(text){
+  setState('speaking'); startViz(true);
+  const res=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,{ method:'POST',
+    headers:{'xi-api-key':ELEVEN_KEY,'Content-Type':'application/json','Accept':'audio/mpeg'},
+    body:JSON.stringify({text:text.slice(0,2500),model_id:CONFIG.elevenModel,voice_settings:{stability:0.45,similarity_boost:0.8,style:0.15}}) });
+  if(!res.ok)throw new Error('eleven '+res.status);
+  const url=URL.createObjectURL(await res.blob()); stopSpeak(); botAudio=new Audio(url);
+  try{ botCtx=botCtx||new (window.AudioContext||window.webkitAudioContext)();
+    const src=botCtx.createMediaElementSource(botAudio); botAnalyser=botCtx.createAnalyser(); botAnalyser.fftSize=128;
+    botData=new Uint8Array(botAnalyser.frequencyBinCount); src.connect(botAnalyser); botAnalyser.connect(botCtx.destination); }catch(e){}
+  speaking=true; setState('speaking');
+  return new Promise(r2=>{ botAudio.onended=()=>{ speaking=false; botAnalyser=null; setState('idle'); startViz(false); URL.revokeObjectURL(url); r2(); }; botAudio.play(); });
+}
+function speakBrowser(text){
+  if(!window.speechSynthesis){ setState('idle'); resumeConvo(); return; }
+  window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang=CONFIG.voiceLang;
+  const vs=window.speechSynthesis.getVoices(); const v=vs.find(x=>/ru[-_]RU/i.test(x.lang))||vs.find(x=>/ru/i.test(x.lang)); if(v)u.voice=v;
+  u.rate=1.04; u.onstart=()=>{speaking=true;setState('speaking');startViz(true);}; u.onend=()=>{speaking=false;setState('idle');startViz(false);resumeConvo();};
+  window.speechSynthesis.speak(u);
+}
+function stopSpeak(){ speaking=false; if(window.speechSynthesis)window.speechSynthesis.cancel(); if(botAudio){try{botAudio.pause();}catch(e){} botAudio=null;} }
+
+/* ---- ВИЗУАЛИЗАТОР ---- */
+const canvas=$('#viz'),ctx=canvas.getContext('2d');
+let micAnalyser=null,micData=null,rafId=null,vizActive=false,phase=0;
+function sizeCanvas(){ const dpr=window.devicePixelRatio||1,r=canvas.getBoundingClientRect(); canvas.width=r.width*dpr; canvas.height=r.height*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+window.addEventListener('resize',sizeCanvas);
+async function initMic(){ if(micAnalyser)return;
+  try{ const stream=await navigator.mediaDevices.getUserMedia({audio:true}); const ac=new (window.AudioContext||window.webkitAudioContext)();
+    const src=ac.createMediaStreamSource(stream); micAnalyser=ac.createAnalyser(); micAnalyser.fftSize=128; src.connect(micAnalyser); micData=new Uint8Array(micAnalyser.frequencyBinCount);
+  }catch(e){ console.warn('mic',e); } }
+function startViz(on){ vizActive=on; if(!rafId)drawViz(); }
+function drawViz(){
+  rafId=requestAnimationFrame(drawViz);
+  const r=canvas.getBoundingClientRect(),cx=r.width/2,cy=r.height/2; ctx.clearRect(0,0,r.width,r.height); phase+=0.011;
+  let level=0.08;
+  if(micAnalyser&&listening){ micAnalyser.getByteFrequencyData(micData); let s=0; for(let i=0;i<micData.length;i++)s+=micData[i]; level=Math.max(0.08,(s/micData.length)/180); }
+  else if(speaking&&botAnalyser){ botAnalyser.getByteFrequencyData(botData); let s=0; for(let i=0;i<botData.length;i++)s+=botData[i]; level=Math.max(0.1,(s/botData.length)/160); }
+  else if(speaking){ level=0.17+0.13*Math.abs(Math.sin(phase*6)); } else { level=0.07+0.025*Math.sin(phase*1.4); }
+  const baseR=Math.min(r.width,r.height)*0.20,rings=4;
+  for(let i=rings;i>=1;i--){ const t=i/rings,rad=baseR+baseR*1.7*t+level*68*t; ctx.beginPath();
+    for(let a=0;a<=Math.PI*2+0.1;a+=0.12){ const wob=1+level*0.42*Math.sin(a*5+phase*3+i); const x=cx+Math.cos(a)*rad*wob,y=cy+Math.sin(a)*rad*wob; a===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
+    ctx.closePath(); ctx.strokeStyle=`rgba(201,169,97,${(0.38*(1-t)+0.05)*(vizActive?1:0.5)})`; ctx.lineWidth=1.3; ctx.stroke(); }
+}
+
+/* ---- UI ---- */
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+$('#orb').addEventListener('click',async()=>{ await initMic(); if(listening)stopListen(); else startListen(); });
+document.querySelectorAll('.shortcuts button').forEach(b=>b.addEventListener('click',()=>{
+  const a=b.dataset.act;
+  if(a==='brief'){ switchTab('work'); buildBriefing(); }
+  else if(a.startsWith('chart:')){ const[,coin,days]=a.split(':'); showChart(coin,parseInt(days)||30); }
+  else if(a.startsWith('ask:')){ ask(a.slice(4)); }
+}));
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeViz(); });
+
+function openGate(){ $('#keyInput').value=ANTHROPIC_KEY; $('#elevenInput').value=ELEVEN_KEY; $('#voiceInput').value=VOICE_ID; $('#gate').style.display='flex'; setTimeout(()=>$('#keyInput').focus(),50); }
+$('#gearBtn').addEventListener('click',openGate);
+$('#testVoice').addEventListener('click',async()=>{
+  const key=$('#elevenInput').value.trim(); const vid=$('#voiceInput').value.trim()||'pNInz6obpgDQGcFmaJgB'; const st=$('#voiceStatus');
+  if(!key){ st.textContent='Сначала вставь ключ ElevenLabs выше.'; st.style.color='var(--down)'; return; }
+  st.textContent='Проверяю голос…'; st.style.color='var(--text-dim)';
+  try{
+    const res=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}`,{ method:'POST',
+      headers:{'xi-api-key':key,'Content-Type':'application/json','Accept':'audio/mpeg'},
+      body:JSON.stringify({text:'Джарвис на связи. Голос подключён.',model_id:CONFIG.elevenModel,voice_settings:{stability:0.45,similarity_boost:0.8,style:0.15}}) });
+    if(res.ok){ const url=URL.createObjectURL(await res.blob()); new Audio(url).play(); st.textContent='✓ Голос работает — слушай. Жми «Сохранить».'; st.style.color='var(--up)'; }
+    else if(res.status===401){ st.textContent='✕ Ключ неверный (401). Скопируй заново на elevenlabs.io → API Keys.'; st.style.color='var(--down)'; }
+    else if(res.status===402){ st.innerHTML='✕ Голос только на платном плане (402). Возьми бесплатный Adam: pNInz6obpgDQGcFmaJgB'; st.style.color='var(--down)'; }
+    else if(res.status===404){ st.innerHTML='✕ Голос не найден (404). Из Voice Library — «Add to My Voices», потом скопируй ID.'; st.style.color='var(--down)'; }
+    else if(res.status===422){ st.textContent='✕ Неверный ID голоса (422). Вставь Voice ID, а не имя.'; st.style.color='var(--down)'; }
+    else { const t=await res.text(); st.textContent='✕ Ошибка '+res.status+'. '+t.slice(0,90); st.style.color='var(--down)'; }
+  }catch(e){ st.textContent='✕ Запрос не прошёл (сеть). '+(e.message||''); st.style.color='var(--down)'; }
+});
+$('#saveKey').addEventListener('click',()=>{
+  const k=$('#keyInput').value.trim(); if(k){ANTHROPIC_KEY=k;localStorage.setItem('jarvis_key',k);}
+  ELEVEN_KEY=$('#elevenInput').value.trim(); localStorage.setItem('jarvis_eleven',ELEVEN_KEY);
+  VOICE_ID=$('#voiceInput').value.trim()||'pNInz6obpgDQGcFmaJgB'; localStorage.setItem('jarvis_voice',VOICE_ID);
+  $('#gate').style.display='none'; loadMarket();
+});
+
+/* старт */
+sizeCanvas(); startViz(true); loadMarket(); setInterval(loadMarket,60000); renderPortfolio(); renderAlerts();
+if(window.speechSynthesis) window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.getVoices();
+if(!ANTHROPIC_KEY) openGate();
+</script>
+</body>
+</html>
