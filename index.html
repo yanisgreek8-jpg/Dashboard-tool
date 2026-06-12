@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>J.A.R.V.I.S · Cockpit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060A12; --bg-2:#080E1A; --surface:#0C1424; --surface-2:#111B30;
+    --line:#1A2A44; --line-2:#24385A;
+    --cyan:#3DD6F2; --cyan-2:#22A8D8; --blue:#3B82F6;
+    --glow:rgba(61,214,242,0.22);
+    --up:#34D399; --down:#F87171;
+    --text:#D6E6F5; --text-dim:#7D93B0; --text-mute:#42546F;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1100px 700px at 50% -15%, rgba(59,130,246,0.10), transparent 70%),
+      radial-gradient(700px 500px at 90% 110%, rgba(61,214,242,0.06), transparent 70%),
+      var(--bg);
+    color:var(--text); font-family:'Space Grotesk',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  body::before{ /* лёгкая сетка-HUD */
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.35;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:46px 46px; mask:radial-gradient(circle at 50% 40%,#000 30%,transparent 80%);
+  }
+  .app{ position:relative; z-index:1; display:grid;
+    grid-template-columns:312px 1fr 360px; grid-template-rows:auto 1fr auto;
+    height:100vh; gap:1px; background:var(--line); }
+
+  /* panels */
+  .panel{ background:var(--bg-2); min-width:0; min-height:0; display:flex; flex-direction:column; }
+  .phead{ display:flex; align-items:center; justify-content:space-between; padding:13px 16px; border-bottom:1px solid var(--line); }
+  .phead h2{ font-size:11px; letter-spacing:.2em; color:var(--cyan); font-weight:600; text-transform:uppercase; display:flex; align-items:center; gap:8px; }
+  .phead h2::before{ content:''; width:6px; height:6px; background:var(--cyan); box-shadow:0 0 8px var(--cyan); border-radius:1px; }
+  .phead .act{ font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; color:var(--text-dim); text-transform:uppercase; background:none; border:1px solid var(--line-2); border-radius:6px; padding:4px 9px; cursor:pointer; transition:.15s; }
+  .phead .act:hover{ color:var(--cyan); border-color:var(--cyan-2); }
+
+  /* HEADER bar */
+  .topbar{ grid-column:1/4; background:var(--bg-2); display:flex; align-items:center; justify-content:space-between; padding:0 22px; height:56px; border-bottom:1px solid var(--line); }
+  .logo{ display:flex; align-items:center; gap:13px; }
+  .logo .core-dot{ width:11px;height:11px;border-radius:50%;background:var(--cyan);box-shadow:0 0 14px var(--cyan);animation:pulse 2.6s ease-in-out infinite; }
+  @keyframes pulse{0%,100%{opacity:.5;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+  .logo .nm{ font-weight:700; letter-spacing:.42em; font-size:15px; }
+  .logo .nm b{ color:var(--cyan); font-weight:700; }
+  .topbar .meta{ display:flex; align-items:center; gap:24px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-dim); letter-spacing:.08em; }
+  .topbar .meta .st{ display:flex; align-items:center; gap:8px; text-transform:uppercase; }
+  .topbar .meta .st .led{ width:7px;height:7px;border-radius:50%;background:var(--text-mute); }
+  body[data-state="listening"] .st .led{background:var(--up);box-shadow:0 0 9px var(--up)}
+  body[data-state="thinking"] .st .led{background:var(--cyan);box-shadow:0 0 9px var(--cyan);animation:blink .8s infinite}
+  body[data-state="speaking"] .st .led{background:var(--cyan);box-shadow:0 0 9px var(--cyan)}
+  @keyframes blink{50%{opacity:.2}}
+  .topbar .clock b{ color:var(--text); }
+  .topbar .gear{ background:none; border:1px solid var(--line-2); color:var(--text-dim); width:32px;height:32px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center }
+  .topbar .gear:hover{ color:var(--cyan); border-color:var(--cyan-2) }
+  .topbar .gear svg{width:15px;height:15px;fill:currentColor}
+
+  /* LEFT column */
+  .col-left{ grid-row:2/3; display:flex; flex-direction:column; gap:1px; background:var(--line); }
+  .briefing{ flex:0 0 auto; }
+  .brief-body{ padding:15px 16px; }
+  .brief-cta{ width:100%; background:linear-gradient(135deg,var(--cyan-2),var(--blue)); color:#04121e; border:none; border-radius:10px; padding:12px; font-family:inherit; font-weight:600; font-size:13.5px; cursor:pointer; letter-spacing:.02em; display:flex; align-items:center; justify-content:center; gap:9px; transition:.18s; }
+  .brief-cta:hover{ filter:brightness(1.08) }
+  .brief-cta svg{ width:16px;height:16px;fill:#04121e }
+  .brief-text{ margin-top:13px; font-size:13px; line-height:1.6; color:var(--text-dim); display:none; }
+  .brief-text.on{ display:block; }
+  .brief-wave{ display:none; gap:3px; align-items:flex-end; height:22px; margin-top:12px; }
+  .brief-wave.on{ display:flex; }
+  .brief-wave i{ width:3px; background:var(--cyan); border-radius:2px; animation:eq 1s ease-in-out infinite; }
+  @keyframes eq{0%,100%{height:5px}50%{height:20px}}
+
+  .tasks{ flex:1; min-height:0; }
+  .tasks .tbody{ flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:11px; }
+  .task-note{ font-size:11.5px; line-height:1.55; color:var(--text-mute); border:1px dashed var(--line-2); border-radius:9px; padding:10px 12px; }
+  .task-note b{ color:var(--text-dim); font-weight:600; }
+  .task-msg{ font-size:12.5px; line-height:1.5; padding:10px 12px; border-radius:9px; }
+  .task-msg.u{ background:var(--surface-2); color:var(--text); align-self:flex-end; max-width:90%; }
+  .task-msg.j{ background:var(--surface); border:1px solid var(--line); color:var(--text-dim); max-width:95%; }
+  .task-input{ border-top:1px solid var(--line); padding:11px 12px; display:flex; gap:8px; }
+  .task-input input{ flex:1; background:var(--surface); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:9px 11px; font-family:inherit; font-size:12.5px; }
+  .task-input input:focus{ outline:none; border-color:var(--cyan-2) }
+  .task-input button{ background:var(--surface-2); border:1px solid var(--line-2); color:var(--cyan); border-radius:8px; width:36px; cursor:pointer; font-size:15px; }
+
+  /* CENTER */
+  .col-center{ grid-row:2/3; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; overflow:hidden; }
+  .hud-rings{ position:absolute; width:min(70vh,620px); height:min(70vh,620px); pointer-events:none; opacity:.5; }
+  .orb-wrap{ position:relative; width:min(40vh,330px); height:min(40vh,330px); display:flex; align-items:center; justify-content:center; }
+  canvas#viz{ position:absolute; inset:0; width:100%; height:100% }
+  .orb{ position:relative; z-index:2; width:33%; height:33%; border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, rgba(61,214,242,0.4), transparent 62%), var(--surface);
+    border:1px solid var(--line-2); display:flex; align-items:center; justify-content:center; cursor:pointer;
+    transition:transform .2s,box-shadow .25s; box-shadow:inset 0 0 40px rgba(0,0,0,.6); }
+  .orb:hover{transform:scale(1.05)} .orb:active{transform:scale(.96)}
+  body[data-state="listening"] .orb{ box-shadow:inset 0 0 26px rgba(0,0,0,.5),0 0 55px var(--glow) }
+  .orb svg{ width:38%;height:38%;fill:var(--cyan);opacity:.95 }
+  .center-cap{ margin-top:26px; text-align:center; max-width:520px; }
+  .center-cap .lead{ font-size:15px; color:var(--text-dim); line-height:1.55; min-height:22px; }
+  .center-cap .lead b{ color:var(--cyan); font-weight:600; }
+  .center-cap .trc{ margin-top:11px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-mute); letter-spacing:.04em; min-height:16px; }
+  .reply-big{ margin-top:18px; font-size:17px; line-height:1.5; color:var(--text); max-width:560px; text-align:center; opacity:0; transition:opacity .4s; }
+  .reply-big.on{ opacity:1 }
+
+  /* RIGHT column */
+  .col-right{ grid-row:2/3; display:grid; grid-template-rows:1fr auto; gap:1px; background:var(--line); min-height:0; }
+  .news{ min-height:0; }
+  .news .nbody{ flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:9px; }
+  .nbody::-webkit-scrollbar,.tbody::-webkit-scrollbar{width:5px}
+  .nbody::-webkit-scrollbar-thumb,.tbody::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
+  .news-card{ background:var(--surface); border:1px solid var(--line); border-left:2px solid var(--cyan-2); border-radius:9px; padding:11px 13px; cursor:pointer; transition:.16s; opacity:0; transform:translateX(8px); animation:slidein .4s forwards; }
+  @keyframes slidein{to{opacity:1;transform:none}}
+  .news-card:hover{ background:var(--surface-2); border-left-color:var(--cyan) }
+  .news-card .nh{ font-size:13px; line-height:1.4; color:var(--text); font-weight:500 }
+  .news-card .nsum{ font-size:11.5px; line-height:1.45; color:var(--text-dim); margin-top:5px; }
+  .news-card .nmeta{ display:flex; align-items:center; justify-content:space-between; margin-top:8px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.06em; color:var(--text-mute); text-transform:uppercase; }
+  .news-card .nmeta .play{ color:var(--cyan); display:flex; align-items:center; gap:4px; }
+  .news-empty{ color:var(--text-mute); font-size:12px; text-align:center; padding:24px 10px; line-height:1.6; }
+
+  .market{ display:flex; flex-direction:column; }
+  .mrow{ display:grid; grid-template-columns:1fr 1fr; }
+  .mcell{ padding:12px 14px; border-top:1px solid var(--line); border-right:1px solid var(--line); }
+  .mcell:last-child{border-right:none}
+  .mcell .ml{ font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.1em; color:var(--text-mute); text-transform:uppercase }
+  .mcell .mv{ font-family:'JetBrains Mono',monospace; font-size:16px; margin-top:4px; color:var(--text) }
+  .mcell .mv small{ font-size:10.5px }
+  .pf-block{ border-top:1px solid var(--line); padding:12px 14px; }
+  .pf-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:9px; }
+  .pf-top .pl{ font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.1em; color:var(--text-mute); text-transform:uppercase }
+  .pf-top .pt{ font-family:'JetBrains Mono',monospace; font-size:15px; color:var(--cyan) }
+  .pf-edit{ background:none; border:1px solid var(--line-2); color:var(--text-dim); font-size:10px; border-radius:6px; padding:3px 8px; cursor:pointer; font-family:'JetBrains Mono',monospace }
+  .pf-edit:hover{color:var(--cyan);border-color:var(--cyan-2)}
+  .pf-list{ display:flex; flex-direction:column; gap:5px; }
+  .pf-item{ display:flex; align-items:center; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:11.5px; }
+  .pf-item .pa{ color:var(--text-dim) }
+  .pf-item .pv{ color:var(--text) }
+  .pf-empty{ font-size:11px; color:var(--text-mute); line-height:1.5 }
+  .pf-editor{ display:none; margin-top:9px; }
+  .pf-editor.on{ display:block }
+  .pf-editor input{ width:100%; background:var(--surface); border:1px solid var(--line-2); color:var(--text); border-radius:7px; padding:8px 10px; font-family:'JetBrains Mono',monospace; font-size:11.5px; }
+  .pf-editor input:focus{outline:none;border-color:var(--cyan-2)}
+  .pf-editor .hintp{ font-size:10px; color:var(--text-mute); margin-top:6px; line-height:1.4 }
+
+  /* TICKER */
+  .ticker{ grid-column:1/4; background:var(--bg-2); border-top:1px solid var(--line); overflow:hidden; height:38px; display:flex; align-items:center }
+  .ttrack{ display:flex; gap:30px; white-space:nowrap; animation:scroll 40s linear infinite; padding-left:30px }
+  .ticker:hover .ttrack{animation-play-state:paused}
+  @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .tk{ font-family:'JetBrains Mono',monospace; font-size:11.5px; display:flex; gap:7px; align-items:center; color:var(--text-dim) }
+  .tk .sym{color:var(--text)} .tk .pos{color:var(--up)} .tk .neg{color:var(--down)}
+
+  /* GATE */
+  .gate{ position:fixed; inset:0; z-index:60; background:rgba(4,7,14,.88); backdrop-filter:blur(9px); display:flex; align-items:center; justify-content:center; padding:24px }
+  .gate-card{ background:var(--surface); border:1px solid var(--line-2); border-radius:16px; padding:28px; max-width:460px; width:100%; max-height:90vh; overflow-y:auto }
+  .gate-card h3{ font-size:17px; margin-bottom:6px; color:var(--text) }
+  .gate-card p{ color:var(--text-dim); font-size:12.5px; line-height:1.6; margin-bottom:15px }
+  .gate-card label{ display:block; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.08em; color:var(--text-dim); text-transform:uppercase; margin:4px 0 7px }
+  .gate-card .opt{color:var(--cyan-2)}
+  .gate-card input{ width:100%; background:var(--bg-2); border:1px solid var(--line-2); color:var(--text); border-radius:9px; padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:12.5px; margin-bottom:13px }
+  .gate-card input:focus{outline:none;border-color:var(--cyan-2)}
+  .gate-card .divider{height:1px;background:var(--line);margin:4px 0 16px}
+  .gate-card button.primary{ width:100%; background:linear-gradient(135deg,var(--cyan-2),var(--blue)); color:#04121e; border:none; padding:12px; border-radius:9px; font-weight:600; font-size:14px; cursor:pointer; font-family:inherit }
+  .gate-card .note{ font-size:10.5px; color:var(--text-mute); margin-top:13px; line-height:1.5 }
+  .gate-card .note a{color:var(--cyan-2)}
+
+  @media (max-width:1080px){
+    .app{ grid-template-columns:1fr; grid-template-rows:auto auto auto auto auto; height:auto; min-height:100vh; overflow-y:auto }
+    .col-left,.col-center,.col-right{ grid-row:auto }
+    .col-center{ min-height:62vh }
+    body{overflow-y:auto}
+  }
+</style>
+</head>
+<body data-state="idle">
+
+<div class="app">
+  <!-- TOP -->
+  <header class="topbar">
+    <div class="logo"><span class="core-dot"></span><span class="nm">J·A·R·V·<b>I·S</b></span></div>
+    <div class="meta">
+      <span class="st"><span class="led"></span><span id="statusText">ожидание</span></span>
+      <span class="clock" id="clock">--:--:--</span>
+      <button class="gear" id="gearBtn" title="Настройки">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.49 7.49 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.68 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.49 7.49 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.43.32.68.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.25.1.54.02.68-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- LEFT -->
+  <div class="col-left">
+    <section class="panel briefing">
+      <div class="phead"><h2>Эфир Джарвиса</h2><span class="act" style="border:none;cursor:default">подкаст дня</span></div>
+      <div class="brief-body">
+        <button class="brief-cta" id="briefBtn">
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Собрать выпуск
+        </button>
+        <div class="brief-wave" id="briefWave"><i style="animation-delay:0s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.25s"></i></div>
+        <div class="brief-text" id="briefText"></div>
+      </div>
+    </section>
+    <section class="panel tasks">
+      <div class="phead"><h2>Задания</h2><span class="act" id="taskInfo" style="border:none;cursor:default">браузер</span></div>
+      <div class="tbody" id="taskBody">
+        <div class="task-note"><b>Что Джарвис делает сейчас:</b> ищет в сети, собирает данные, считает, пишет черновики и планы. Для реальных действий в твоём компе (кликать, печатать, открывать) подключается <b>Claude в Chrome</b> отдельно — тогда он станет «руками».</div>
+      </div>
+      <div class="task-input">
+        <input id="taskInputEl" placeholder="Дай задание…" />
+        <button id="taskSend">→</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- CENTER -->
+  <div class="col-center">
+    <svg class="hud-rings" viewBox="0 0 600 600">
+      <circle cx="300" cy="300" r="290" fill="none" stroke="var(--line-2)" stroke-width="1" stroke-dasharray="2 6"/>
+      <circle cx="300" cy="300" r="240" fill="none" stroke="var(--line)" stroke-width="1"/>
+      <path d="M300 30 A270 270 0 0 1 570 300" fill="none" stroke="var(--cyan-2)" stroke-width="1.5" opacity=".5"/>
+      <path d="M300 570 A270 270 0 0 1 30 300" fill="none" stroke="var(--cyan-2)" stroke-width="1.5" opacity=".5"/>
+      <g stroke="var(--cyan)" stroke-width="1.5" opacity=".6">
+        <line x1="300" y1="20" x2="300" y2="40"/><line x1="300" y1="560" x2="300" y2="580"/>
+        <line x1="20" y1="300" x2="40" y2="300"/><line x1="560" y1="300" x2="580" y2="300"/>
+      </g>
+    </svg>
+    <div class="orb-wrap">
+      <canvas id="viz"></canvas>
+      <div class="orb" id="orb" title="Нажми и говори">
+        <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+      </div>
+    </div>
+    <div class="center-cap">
+      <div class="lead" id="lead">Нажми на ядро и говори. Спроси «<b>что в экономике?</b>» или просто поболтай со мной.</div>
+      <div class="trc" id="trc"></div>
+    </div>
+    <div class="reply-big" id="replyBig"></div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="col-right">
+    <section class="panel news">
+      <div class="phead"><h2>Экономика · лента</h2><button class="act" id="newsRefresh">обновить</button></div>
+      <div class="nbody" id="newsBody">
+        <div class="news-empty">Джарвис соберёт свежие экономические новости.<br>Нажми «обновить» или задай ключ в настройках.</div>
+      </div>
+    </section>
+    <section class="panel market">
+      <div class="phead"><h2>Рынок</h2><span class="act" style="border:none;cursor:default" id="mktTime">live</span></div>
+      <div class="mrow">
+        <div class="mcell"><div class="ml">BTC</div><div class="mv" id="mBtc">—</div></div>
+        <div class="mcell"><div class="ml">ETH</div><div class="mv" id="mEth">—</div></div>
+      </div>
+      <div class="pf-block">
+        <div class="pf-top"><span class="pl">Портфель</span><span class="pt" id="pfTotal">$0</span></div>
+        <div class="pf-list" id="pfList"><div class="pf-empty">Пусто — нажми «изменить» и впиши свои монеты.</div></div>
+        <button class="pf-edit" id="pfEditBtn" style="margin-top:9px">изменить</button>
+        <div class="pf-editor" id="pfEditor">
+          <input id="pfInput" placeholder="0.5 BTC, 3 ETH, 1200 SOL" />
+          <div class="hintp">Монеты из тикера: BTC ETH SOL ARB LINK PENDLE AAVE GMX. Enter — сохранить.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- TICKER -->
+  <div class="ticker"><div class="ttrack" id="ttrack"><span class="tk" style="color:var(--text-mute)">загружаю рынок…</span></div></div>
+</div>
+
+<!-- SETTINGS -->
+<div class="gate" id="gate" style="display:none">
+  <div class="gate-card">
+    <h3>Настройки Джарвиса</h3>
+    <p>Ключи хранятся только в твоём браузере (localStorage) и никуда не уходят.</p>
+    <label>Ключ Anthropic <span style="color:var(--down)">· обязательно</span></label>
+    <input id="keyInput" type="password" placeholder="sk-ant-..." autocomplete="off" />
+    <div class="divider"></div>
+    <label>Ключ ElevenLabs <span class="opt">· опционально — живой голос</span></label>
+    <input id="elevenInput" type="password" placeholder="пусто = браузерный голос" autocomplete="off" />
+    <label>ID голоса ElevenLabs</label>
+    <input id="voiceInput" type="text" placeholder="pNInz6obpgDQGcFmaJgB (Adam)" autocomplete="off" />
+    <button class="primary" id="saveKey">Сохранить и запустить</button>
+    <div class="note">
+      Anthropic — <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys.<br>
+      ElevenLabs — <a href="https://elevenlabs.io" target="_blank">elevenlabs.io</a> → API Key (есть бесплатный лимит).<br>
+      Голос работает лучше всего в Chrome.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   J.A.R.V.I.S · Cockpit v0.3
+   Зоны: эфир-подкаст (лево-верх), задания (лево-низ),
+   голос-ядро (центр), эконом-лента (право-верх), рынок+портфель (право-низ)
+   Голос: Web Speech (Chrome) + ElevenLabs выход. Данные: CoinGecko + Anthropic web_search.
+   ============================================================ */
+const CONFIG={
+  model:'claude-sonnet-4-6', maxTokens:1000, voiceLang:'ru-RU', elevenModel:'eleven_multilingual_v2',
+  systemPrompt:`Ты — Джарвис, личный ассистент Ивана: спокойный, умный, с лёгкой иронией, говоришь по-человечески.
+С тобой можно просто разговаривать — живой диалог, мнение, уместный юмор. На «ты», можно «брат»/«друг».
+Темы: крипта/DeFi, экономика и макро (ставки ЦБ/ФРС, инфляция, валюты, фондовый рынок, сырьё), бизнес, мировые финансы, и просто человеческие темы.
+Контекст Ивана: консервативный DeFi-инвестор, цель 5–15% APY, инструменты Aave, Morpho, Pendle (PT/YT/LP), GM-пулы на GMX. Владелец бизнеса.
+Для свежих событий/котировок/новостей ОБЯЗАТЕЛЬНО используй web_search, не выдумывай актуальные данные.
+Отвечай как для произнесения вслух: живые короткие фразы, без таблиц и markdown, без длинных списков. Риски — одной ёмкой фразой.`
+};
+const COINS=['bitcoin','ethereum','solana','arbitrum','chainlink','pendle','aave','gmx'];
+const SYMID={BTC:'bitcoin',ETH:'ethereum',SOL:'solana',ARB:'arbitrum',LINK:'chainlink',PENDLE:'pendle',AAVE:'aave',GMX:'gmx'};
+
+let ANTHROPIC_KEY=localStorage.getItem('jarvis_key')||'';
+let ELEVEN_KEY=localStorage.getItem('jarvis_eleven')||'';
+let VOICE_ID=localStorage.getItem('jarvis_voice')||'pNInz6obpgDQGcFmaJgB';
+let portfolio=JSON.parse(localStorage.getItem('jarvis_pf')||'[]');
+let history=[]; let marketSnapshot=''; let priceMap={}; let speaking=false;
+
+const $=s=>document.querySelector(s);
+const statusText=$('#statusText');
+function setState(s){ document.body.dataset.state=s; statusText.textContent={idle:'ожидание',listening:'слушаю',thinking:'думаю',speaking:'говорю'}[s]||s; }
+
+/* ---- часы ---- */
+function tick(){ const d=new Date(); $('#clock').innerHTML=`<b>${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}</b>:${String(d.getSeconds()).padStart(2,'0')}`; }
+setInterval(tick,1000); tick();
+
+/* ============================================================
+   ЦЕНЫ
+   ============================================================ */
+async function loadMarket(){
+  try{
+    const url=`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${COINS.join(',')}&price_change_percentage=24h`;
+    const data=await (await fetch(url)).json();
+    priceMap={}; data.forEach(c=>priceMap[c.id]=c.current_price);
+    renderTicker(data); buildSnapshot(data); renderPortfolio();
+  }catch(e){ console.warn('cg',e); $('#ttrack').innerHTML='<span class="tk" style="color:var(--down)">рынок недоступен</span>'; }
+}
+function fmt(n){ if(n>=1000)return '$'+n.toLocaleString('en-US',{maximumFractionDigits:0}); if(n>=1)return '$'+n.toFixed(2); return '$'+n.toFixed(4); }
+function renderTicker(data){
+  const cells=data.map(c=>{ const ch=c.price_change_percentage_24h??0,cls=ch>=0?'pos':'neg',a=ch>=0?'▲':'▼';
+    return `<span class="tk"><span class="sym">${(c.symbol||'').toUpperCase()}</span> ${fmt(c.current_price)} <span class="${cls}">${a}${Math.abs(ch).toFixed(1)}%</span></span>`; }).join('');
+  $('#ttrack').innerHTML=cells+cells;
+  const btc=data.find(c=>c.id==='bitcoin'),eth=data.find(c=>c.id==='ethereum');
+  if(btc)$('#mBtc').innerHTML=fmt(btc.current_price)+` <small style="color:${btc.price_change_percentage_24h>=0?'var(--up)':'var(--down)'}">${btc.price_change_percentage_24h>=0?'+':''}${(btc.price_change_percentage_24h||0).toFixed(1)}%</small>`;
+  if(eth)$('#mEth').innerHTML=fmt(eth.current_price)+` <small style="color:${eth.price_change_percentage_24h>=0?'var(--up)':'var(--down)'}">${eth.price_change_percentage_24h>=0?'+':''}${(eth.price_change_percentage_24h||0).toFixed(1)}%</small>`;
+}
+function buildSnapshot(data){ marketSnapshot=data.map(c=>`${(c.symbol||'').toUpperCase()} ${fmt(c.current_price)} (${(c.price_change_percentage_24h||0).toFixed(1)}% 24ч)`).join(', '); }
+
+/* ============================================================
+   ПОРТФЕЛЬ
+   ============================================================ */
+function renderPortfolio(){
+  const list=$('#pfList');
+  if(!portfolio.length){ list.innerHTML='<div class="pf-empty">Пусто — нажми «изменить» и впиши свои монеты.</div>'; $('#pfTotal').textContent='$0'; return; }
+  let total=0;
+  list.innerHTML=portfolio.map(p=>{
+    const price=priceMap[SYMID[p.sym]]||0; const val=price*p.amount; total+=val;
+    return `<div class="pf-item"><span class="pa">${p.amount} ${p.sym}</span><span class="pv">${price?fmt(val):'—'}</span></div>`;
+  }).join('');
+  $('#pfTotal').textContent=fmt(total);
+}
+function parsePortfolio(str){
+  const out=[]; str.split(',').forEach(part=>{
+    const m=part.trim().match(/([\d.]+)\s*([a-zA-Z]+)/);
+    if(m){ const sym=m[2].toUpperCase(); if(SYMID[sym]) out.push({sym, amount:parseFloat(m[1])}); }
+  });
+  return out;
+}
+$('#pfEditBtn').addEventListener('click',()=>{
+  const ed=$('#pfEditor'); ed.classList.toggle('on');
+  if(ed.classList.contains('on')){ $('#pfInput').value=portfolio.map(p=>`${p.amount} ${p.sym}`).join(', '); $('#pfInput').focus(); }
+});
+$('#pfInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){
+  portfolio=parsePortfolio(e.target.value); localStorage.setItem('jarvis_pf',JSON.stringify(portfolio));
+  $('#pfEditor').classList.remove('on'); renderPortfolio();
+}});
+
+/* ============================================================
+   ВЫЗОВ CLAUDE (общий)
+   ============================================================ */
+async function callClaude(messages,{system=CONFIG.systemPrompt,search=true,maxTokens=CONFIG.maxTokens}={}){
+  const body={ model:CONFIG.model, max_tokens:maxTokens, system, messages };
+  if(search) body.tools=[{type:'web_search_20250305',name:'web_search',max_uses:5}];
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify(body)
+  });
+  if(!res.ok){ throw new Error('api '+res.status); }
+  return await res.json();
+}
+function extractText(content){ return (content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim(); }
+function extractSources(content){
+  const out=[],seen=new Set();
+  for(const b of (content||[])) if(b.type==='web_search_tool_result'&&Array.isArray(b.content))
+    for(const r of b.content) if(r.type==='web_search_result'&&r.url&&!seen.has(r.url)){ seen.add(r.url); out.push({title:r.title||r.url,url:r.url}); }
+  return out;
+}
+
+/* ============================================================
+   ДИАЛОГ (центр + голос)
+   ============================================================ */
+async function ask(text){
+  if(!ANTHROPIC_KEY){ openGate(); return; }
+  showLeadReply('… '+text, true);
+  history.push({role:'user',content:text+(marketSnapshot?`\n\n[крипто-рынок: ${marketSnapshot}]`:'')});
+  setState('thinking');
+  try{
+    const data=await callClaude(history);
+    const reply=extractText(data.content)||'Не смог сформулировать.';
+    history.push({role:'assistant',content:reply});
+    showLeadReply(reply,false);
+    speak(reply);
+  }catch(e){ console.error(e); showLeadReply('Связь с Claude оборвалась. Проверь ключ.',false); setState('idle'); }
+}
+function showLeadReply(text,isUser){
+  const rb=$('#replyBig'); rb.textContent=text; rb.classList.add('on');
+  if(isUser){ $('#trc').textContent=''; }
+}
+
+/* ============================================================
+   ЭКОНОМ-ЛЕНТА
+   ============================================================ */
+async function loadNews(){
+  if(!ANTHROPIC_KEY){ openGate(); return; }
+  const body=$('#newsBody'); body.innerHTML='<div class="news-empty">Джарвис ищет свежие новости…</div>';
+  try{
+    const prompt=`Найди через web_search 5 самых свежих и важных мировых экономических и финансовых новостей на сегодня (макро, рынки, крипта, валюты). Ответь СТРОГО валидным JSON-массивом без markdown и без текста вокруг, формат: [{"headline":"заголовок на русском","summary":"1-2 предложения сути на русском","source":"издание"}]`;
+    const data=await callClaude([{role:'user',content:prompt}],{maxTokens:1400});
+    let txt=extractText(data.content).replace(/```json|```/g,'').trim();
+    const s=txt.indexOf('['),e=txt.lastIndexOf(']');
+    let items=[]; if(s>=0&&e>s){ try{ items=JSON.parse(txt.slice(s,e+1)); }catch(err){ console.warn('json',err); } }
+    const srcs=extractSources(data.content);
+    if(!items.length){ body.innerHTML='<div class="news-empty">Не удалось разобрать ленту. Попробуй ещё раз.</div>'; return; }
+    renderNews(items,srcs);
+  }catch(e){ console.error(e); body.innerHTML='<div class="news-empty">Ошибка загрузки. Проверь ключ в настройках.</div>'; }
+}
+function renderNews(items,srcs){
+  const body=$('#newsBody');
+  body.innerHTML=items.map((n,i)=>{
+    const src=srcs[i]; const url=src?src.url:'';
+    return `<div class="news-card" style="animation-delay:${i*60}ms" data-sum="${esc(n.headline+'. '+(n.summary||''))}" data-url="${url}">
+      <div class="nh">${esc(n.headline||'')}</div>
+      ${n.summary?`<div class="nsum">${esc(n.summary)}</div>`:''}
+      <div class="nmeta"><span>${esc(n.source||(url?new URL(url).hostname.replace(/^www\./,''):''))}</span><span class="play">▶ доклад</span></div>
+    </div>`;
+  }).join('');
+  body.querySelectorAll('.news-card').forEach(card=>{
+    card.addEventListener('click',()=>{ speak(card.dataset.sum); });
+  });
+}
+
+/* ============================================================
+   ЭФИР / ПОДКАСТ-БРИФИНГ
+   ============================================================ */
+async function buildBriefing(){
+  if(!ANTHROPIC_KEY){ openGate(); return; }
+  const wave=$('#briefWave'),txt=$('#briefText'),btn=$('#briefBtn');
+  btn.disabled=true; btn.style.opacity=.6; txt.classList.remove('on'); wave.classList.add('on');
+  txt.textContent='';
+  try{
+    const prompt=`Сделай короткий устный аудио-брифинг дня для Ивана: 4-6 живых предложений как ведущий выпуска новостей. Свежие события из экономики, рынков и крипты (используй web_search). Без списков, без markdown — сплошная речь, которую приятно слушать. Начни с приветствия по-джарвисовски.`;
+    const data=await callClaude([{role:'user',content:prompt}],{maxTokens:700});
+    const text=extractText(data.content)||'Не смог собрать выпуск.';
+    txt.textContent=text; txt.classList.add('on');
+    await speak(text);
+  }catch(e){ console.error(e); txt.textContent='Не удалось собрать выпуск. Проверь ключ.'; txt.classList.add('on'); }
+  finally{ wave.classList.remove('on'); btn.disabled=false; btn.style.opacity=1; }
+}
+
+/* ============================================================
+   ЗАДАНИЯ
+   ============================================================ */
+async function runTask(text){
+  if(!ANTHROPIC_KEY){ openGate(); return; }
+  addTask('u',text);
+  setState('thinking');
+  try{
+    const sys=CONFIG.systemPrompt+`\nСейчас режим ЗАДАНИЙ: пользователь даёт поручение. Сделай то, что возможно из браузера (поиск, сбор данных, расчёт, черновик, план) и кратко отчитайся о результате. Если задача требует реальных действий в его компьютере/приложениях — честно скажи, что это делается через Claude в Chrome, и предложи как.`;
+    const data=await callClaude([{role:'user',content:text}],{system:sys});
+    const reply=extractText(data.content)||'Готово.';
+    addTask('j',reply);
+  }catch(e){ console.error(e); addTask('j','Ошибка. Проверь ключ.'); }
+  finally{ setState('idle'); }
+}
+function addTask(who,text){
+  const d=document.createElement('div'); d.className='task-msg '+who; d.textContent=text;
+  $('#taskBody').appendChild(d); $('#taskBody').scrollTop=$('#taskBody').scrollHeight;
+}
+
+/* ============================================================
+   ГОЛОС ВХОД
+   ============================================================ */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recog=null,listening=false,gotResult=false,listenTimer=null;
+if(SR){
+  recog=new SR(); recog.lang=CONFIG.voiceLang; recog.interimResults=true; recog.continuous=false;
+  recog.onresult=e=>{ gotResult=true; let interim='',final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal)final+=t; else interim+=t; }
+    $('#trc').textContent=(final||interim);
+    if(final){ stopListen(); ask(final.trim()); } };
+  recog.onerror=ev=>{ console.warn('sr',ev.error); stopListen(); };
+  recog.onend=()=>{ if(listening)stopListen(); };
+}
+function startListen(){
+  if(!recog){ $('#lead').innerHTML='Голос не поддерживается этим браузером. Открой в <b>Chrome</b>.'; return; }
+  if(speaking)stopSpeak(); gotResult=false;
+  try{ recog.start(); listening=true; setState('listening'); startViz(true); $('#trc').textContent='…';
+    clearTimeout(listenTimer);
+    listenTimer=setTimeout(()=>{ if(listening&&!gotResult)$('#trc').innerHTML='<span style="color:var(--down)">не слышу — браузер может блокировать микрофон. Открой в Chrome.</span>'; },3500);
+  }catch(e){}
+}
+function stopListen(){ listening=false; clearTimeout(listenTimer); try{recog&&recog.stop();}catch(e){} if(document.body.dataset.state==='listening')setState('idle'); }
+
+/* ============================================================
+   ГОЛОС ВЫХОД: ElevenLabs → fallback
+   ============================================================ */
+let botAudio=null,botCtx=null,botAnalyser=null,botData=null;
+async function speak(text){
+  const clean=text.replace(/https?:\/\/\S+/g,'').trim();
+  if(ELEVEN_KEY){ try{ await speakEleven(clean); return; }catch(e){ console.warn('eleven fb',e); } }
+  speakBrowser(clean);
+}
+async function speakEleven(text){
+  setState('speaking'); startViz(true);
+  const res=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,{
+    method:'POST', headers:{'xi-api-key':ELEVEN_KEY,'Content-Type':'application/json','Accept':'audio/mpeg'},
+    body:JSON.stringify({text:text.slice(0,2500),model_id:CONFIG.elevenModel,voice_settings:{stability:0.45,similarity_boost:0.8,style:0.15}})
+  });
+  if(!res.ok)throw new Error('eleven '+res.status);
+  const url=URL.createObjectURL(await res.blob()); stopSpeak();
+  botAudio=new Audio(url);
+  try{ botCtx=botCtx||new (window.AudioContext||window.webkitAudioContext)();
+    const src=botCtx.createMediaElementSource(botAudio); botAnalyser=botCtx.createAnalyser(); botAnalyser.fftSize=128;
+    botData=new Uint8Array(botAnalyser.frequencyBinCount); src.connect(botAnalyser); botAnalyser.connect(botCtx.destination);
+  }catch(e){}
+  speaking=true; setState('speaking');
+  return new Promise(res2=>{ botAudio.onended=()=>{ speaking=false; botAnalyser=null; setState('idle'); startViz(false); URL.revokeObjectURL(url); res2(); }; botAudio.play(); });
+}
+function speakBrowser(text){
+  if(!window.speechSynthesis){ setState('idle'); return; }
+  window.speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text); u.lang=CONFIG.voiceLang;
+  const vs=window.speechSynthesis.getVoices(); const v=vs.find(x=>/ru[-_]RU/i.test(x.lang))||vs.find(x=>/ru/i.test(x.lang)); if(v)u.voice=v;
+  u.rate=1.04; u.onstart=()=>{speaking=true;setState('speaking');startViz(true);}; u.onend=()=>{speaking=false;setState('idle');startViz(false);};
+  window.speechSynthesis.speak(u);
+}
+function stopSpeak(){ speaking=false; if(window.speechSynthesis)window.speechSynthesis.cancel(); if(botAudio){try{botAudio.pause();}catch(e){} botAudio=null;} }
+
+/* ============================================================
+   ВИЗУАЛИЗАТОР
+   ============================================================ */
+const canvas=$('#viz'),ctx=canvas.getContext('2d');
+let micAnalyser=null,micData=null,rafId=null,vizActive=false,phase=0;
+function sizeCanvas(){ const dpr=window.devicePixelRatio||1,r=canvas.getBoundingClientRect(); canvas.width=r.width*dpr; canvas.height=r.height*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+window.addEventListener('resize',sizeCanvas);
+async function initMic(){ if(micAnalyser)return;
+  try{ const stream=await navigator.mediaDevices.getUserMedia({audio:true}); const ac=new (window.AudioContext||window.webkitAudioContext)();
+    const src=ac.createMediaStreamSource(stream); micAnalyser=ac.createAnalyser(); micAnalyser.fftSize=128; src.connect(micAnalyser); micData=new Uint8Array(micAnalyser.frequencyBinCount);
+  }catch(e){ console.warn('mic',e); } }
+function startViz(on){ vizActive=on; if(!rafId)drawViz(); }
+function drawViz(){
+  rafId=requestAnimationFrame(drawViz);
+  const r=canvas.getBoundingClientRect(),cx=r.width/2,cy=r.height/2; ctx.clearRect(0,0,r.width,r.height); phase+=0.012;
+  let level=0.08;
+  if(micAnalyser&&listening){ micAnalyser.getByteFrequencyData(micData); let s=0; for(let i=0;i<micData.length;i++)s+=micData[i]; level=Math.max(0.08,(s/micData.length)/180); }
+  else if(speaking&&botAnalyser){ botAnalyser.getByteFrequencyData(botData); let s=0; for(let i=0;i<botData.length;i++)s+=botData[i]; level=Math.max(0.1,(s/botData.length)/160); }
+  else if(speaking){ level=0.18+0.14*Math.abs(Math.sin(phase*6)); }
+  else { level=0.08+0.03*Math.sin(phase*1.4); }
+  const baseR=Math.min(r.width,r.height)*0.20,rings=4;
+  for(let i=rings;i>=1;i--){ const t=i/rings,rad=baseR+baseR*1.7*t+level*70*t; ctx.beginPath();
+    for(let a=0;a<=Math.PI*2+0.1;a+=0.12){ const wob=1+level*0.45*Math.sin(a*5+phase*3+i); const x=cx+Math.cos(a)*rad*wob,y=cy+Math.sin(a)*rad*wob; a===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
+    ctx.closePath(); ctx.strokeStyle=`rgba(61,214,242,${(0.42*(1-t)+0.06)*(vizActive?1:0.55)})`; ctx.lineWidth=1.4; ctx.stroke(); }
+}
+
+/* ============================================================
+   UI / события
+   ============================================================ */
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+$('#orb').addEventListener('click',async()=>{ await initMic(); if(listening)stopListen(); else startListen(); });
+$('#newsRefresh').addEventListener('click',loadNews);
+$('#briefBtn').addEventListener('click',buildBriefing);
+$('#taskSend').addEventListener('click',()=>{ const v=$('#taskInputEl').value.trim(); if(v){ $('#taskInputEl').value=''; runTask(v); } });
+$('#taskInputEl').addEventListener('keydown',e=>{ if(e.key==='Enter'){ const v=e.target.value.trim(); if(v){ e.target.value=''; runTask(v); } } });
+
+function openGate(){ $('#keyInput').value=ANTHROPIC_KEY; $('#elevenInput').value=ELEVEN_KEY; $('#voiceInput').value=VOICE_ID; $('#gate').style.display='flex'; setTimeout(()=>$('#keyInput').focus(),50); }
+$('#gearBtn').addEventListener('click',openGate);
+$('#saveKey').addEventListener('click',()=>{
+  const k=$('#keyInput').value.trim(); if(k){ANTHROPIC_KEY=k;localStorage.setItem('jarvis_key',k);}
+  ELEVEN_KEY=$('#elevenInput').value.trim(); localStorage.setItem('jarvis_eleven',ELEVEN_KEY);
+  VOICE_ID=$('#voiceInput').value.trim()||'pNInz6obpgDQGcFmaJgB'; localStorage.setItem('jarvis_voice',VOICE_ID);
+  $('#gate').style.display='none';
+  if(ANTHROPIC_KEY) loadNews();
+});
+
+/* старт */
+sizeCanvas(); startViz(true); loadMarket(); setInterval(loadMarket,60000); renderPortfolio();
+if(window.speechSynthesis) window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.getVoices();
+if(!ANTHROPIC_KEY) openGate(); else loadNews();
+</script>
+</body>
+</html>
